@@ -1,0 +1,20 @@
+# EXON Windows — Gerekli paketler
+google-genai
+SpeechRecognition
+pyaudio
+psutil
+Pillow
+requests
+beautifulsoup4
+# Windows ek bağımlılıkları
+pygame           # Ses çalma (afplay yerine)
+pyttsx3          # TTS (macOS 'say' yerine)
+pyperclip        # Pano (pbcopy yerine)
+pyautogui        # Klavye otomasyonu (osascript yerine)
+pygetwindow      # Aktif pencere tespiti
+pywin32          # Windows API (win32gui, winreg)
+
+# ── İleri seviye özellikler (OPSİYONEL — yoksa o özellik sessizce devre dışı) ──
+pvporcupine          # "Hey EXON" uyandırma sözcüğü (picovoice access key gerekir)
+opencv-contrib-python  # Yüz tanıma (cv2.face için 'contrib' şart)
+discord.py           # Discord köprüsü (Telegram için ek paket gerekmez, requests yeterli)

@@ -1,0 +1,1434 @@
+#!/usr/bin/env python3
+"""
+EXON Windows — Gerçek zamanlı sesli yardımcı çekirdeği
+Servan Kanğal tarafından yapılmıştır
+Windows ortamına uyarlanmış çalışma akışı
+"""
+
+import asyncio
+import datetime
+import threading
+import traceback
+import os
+import re
+import time
+import urllib.parse
+from pathlib import Path
+import requests
+from bs4 import BeautifulSoup
+
+try:
+    import pyaudio  # type: ignore[reportMissingModuleSource]
+except ImportError:
+    print("\n" + "="*60)
+    print("  HATA: PyAudio modulu bulunamadi!")
+    print("  Cozum - CMD'de su komutu calistirin:")
+    print("    pip install pipwin")
+    print("    pipwin install pyaudio")
+    print("  Veya: setup.bat dosyasini tekrar calistirin.")
+    print("="*60 + "\n")
+    import sys, subprocess, os
+    # Otomatik kurulum dene
+    print("  Otomatik kurulum deneniyor...")
+    r1 = subprocess.run([sys.executable, "-m", "pip", "install", "PyAudio", "--quiet"],
+                        capture_output=True)
+    try:
+        import pyaudio  # type: ignore[reportMissingModuleSource]
+        print("  PyAudio kuruldu ve yuklendi!\n")
+    except ImportError:
+        r2 = subprocess.run([sys.executable, "-m", "pip", "install", "pipwin", "--quiet"],
+                            capture_output=True)
+        r3 = subprocess.run([sys.executable, "-m", "pipwin", "install", "pyaudio"],
+                            capture_output=True)
+        try:
+            import pyaudio  # type: ignore[reportMissingModuleSource]
+            print("  PyAudio kuruldu (pipwin)!\n")
+        except ImportError:
+            print("  Otomatik kurulum basarisiz.")
+            print("  Lutfen setup.bat calistirin ve ENTER'a basin.")
+            input()
+            sys.exit(1)
+from google import genai  # type: ignore[reportMissingImports]
+from google.genai import types  # type: ignore[reportMissingImports]
+
+from app_config import get_app_config_value
+from ui import ExonUI
+from memory.memory_manager import load_memory, update_memory, delete_memory, format_memory_for_prompt
+from actions.open_app import open_app
+from actions.sys_info  import sys_info
+from actions.calendar import get_calendar_events, add_calendar_event, delete_calendar_event
+from actions.reminders import get_reminders, add_reminder
+from actions.browser   import browser_control
+from actions.shell     import shell_run
+from actions.whatsapp  import send_whatsapp_message, save_whatsapp_contact
+from actions.media     import play_media
+from actions.weather   import get_weather_summary
+from actions.screen_vision import analyze_screen, analyze_image_file
+from actions.image_gen import generate_image
+from actions.youtube_stats import get_youtube_channel_report
+from actions.wake_word import WakeWordListener
+from actions.scheduler import TaskScheduler
+from actions.face_auth import FaceAuth
+from bot_bridge import TelegramBridge, DiscordBridge
+
+# ── Paths ───────────────────────────────────────────────────────────────────
+BASE_DIR    = Path(__file__).resolve().parent
+PROMPT_PATH = BASE_DIR / "core" / "prompt.txt"
+
+CONTROL_TOKEN_RE = re.compile(r"<ctrl\d+>", re.IGNORECASE)
+
+# ── Model ───────────────────────────────────────────────────────────────────
+LIVE_MODEL = "models/gemini-2.5-flash-native-audio-latest"
+
+# ── Audio ───────────────────────────────────────────────────────────────────
+FORMAT           = pyaudio.paInt16
+CHANNELS         = 1
+SEND_SAMPLE_RATE = 16000
+RECV_SAMPLE_RATE = 24000
+CHUNK_SIZE       = 1024
+pya              = pyaudio.PyAudio()
+
+# ── Web Araştırma Motoru ─────────────────────────────────────────────────────
+_SEARCH_HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+    "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
+}
+
+# Rate-limit'i aşmak için döndürülen User-Agent havuzu
+_SEARCH_UAS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+]
+
+# Türkçe karakterleri ASCII'ye indirger (Kanğal -> Kangal). Her iki yazımı da aramak için.
+_TR_MAP = str.maketrans({
+    "ğ": "g", "Ğ": "G", "ş": "s", "Ş": "S", "ı": "i", "İ": "I",
+    "ü": "u", "Ü": "U", "ö": "o", "Ö": "O", "ç": "c", "Ç": "C",
+})
+
+
+def _ascii_fold(text: str) -> str:
+    return (text or "").translate(_TR_MAP)
+
+
+def _decode_ddg_href(href: str) -> str:
+    if not href:
+        return ""
+    if href.startswith("//"):
+        href = "https:" + href
+    if "uddg=" in href:
+        try:
+            enc = href.split("uddg=", 1)[1].split("&", 1)[0]
+            return urllib.parse.unquote(enc)
+        except Exception:
+            return href
+    return href
+
+
+def _search_duckduckgo(query: str, tries: int = 3) -> list[tuple[str, str, str]]:
+    """DuckDuckGo 'lite' — (başlık, url, snippet). Rate-limit'e karşı tekrar dener,
+    her denemede farklı User-Agent kullanır ve Türkiye bölgesini (kl=tr-tr) seçer."""
+    for attempt in range(tries):
+        headers = {
+            "User-Agent": _SEARCH_UAS[attempt % len(_SEARCH_UAS)],
+            "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
+        }
+        try:
+            res = requests.post("https://lite.duckduckgo.com/lite/",
+                                data={"q": query, "kl": "tr-tr"},
+                                headers=headers, timeout=12)
+            if res.status_code == 200:
+                soup = BeautifulSoup(res.text, "html.parser")
+                links = soup.select("a.result-link")
+                snippets = soup.select("td.result-snippet")
+                out: list[tuple[str, str, str]] = []
+                for i, a in enumerate(links[:8]):
+                    title = a.get_text(" ", strip=True)
+                    url = _decode_ddg_href(a.get("href", ""))
+                    snippet = snippets[i].get_text(" ", strip=True) if i < len(snippets) else ""
+                    if title and url.startswith("http"):
+                        out.append((title, url, snippet))
+                if out:
+                    return out
+        except Exception:
+            pass
+        # Boş döndüyse (rate-limit) bekle ve farklı UA ile tekrar dene
+        if attempt < tries - 1:
+            time.sleep(1.2)
+    return []
+
+
+def _search_google(query: str) -> list[tuple[str, str, str]]:
+    """Yedek: Google HTML kazıma (sık sık engellenir)."""
+    results: list[tuple[str, str, str]] = []
+    try:
+        url = f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}"
+        res = requests.get(url, headers=_SEARCH_HEADERS, timeout=8)
+        if res.status_code != 200:
+            return results
+        soup = BeautifulSoup(res.text, "html.parser")
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            if "url?q=" in href and "webcache" not in href:
+                target = urllib.parse.unquote(href.split("url?q=")[1].split("&")[0])
+                if target.startswith("http"):
+                    results.append((a.get_text(" ", strip=True)[:120] or target, target, ""))
+    except Exception:
+        pass
+    return results
+
+
+def _search_mojeek(query: str) -> list[tuple[str, str, str]]:
+    """Mojeek — bağımsız (kendi indeksli) arama motoru. Kapsamı genişletmek için."""
+    results: list[tuple[str, str, str]] = []
+    try:
+        res = requests.get("https://www.mojeek.com/search",
+                           params={"q": query}, headers=_SEARCH_HEADERS, timeout=10)
+        if res.status_code != 200:
+            return results
+        soup = BeautifulSoup(res.text, "html.parser")
+        for a in soup.select("a.title")[:8]:
+            title = a.get_text(" ", strip=True)
+            url = a.get("href", "")
+            li = a.find_parent("li")
+            sn = li.select_one("p.s") if li else None
+            snippet = sn.get_text(" ", strip=True) if sn else ""
+            if title and url.startswith("http"):
+                results.append((title, url, snippet))
+    except Exception:
+        pass
+    return results
+
+
+def perform_web_scrape_search(query: str) -> str:
+    """Tüm web genelinde (Google'a denk Bing indeksi dahil) arama yapar.
+    DuckDuckGo'yu birincil motor olarak kullanır; Türkçe karakterli VE karaktersiz
+    yazımı birlikte arar (Kanğal + Kangal), tekrarları ayıklar, snippet'leri ve ilk
+    sayfaların içeriğini birleştirir. Kişi/şirket/güncel bilgi aramaları için."""
+    query = (query or "").strip()
+    if not query:
+        return "Arama sorgusu boş."
+
+    # Hem orijinal hem ASCII'ye indirgenmiş yazımı ara (farklı sonuçlar getirir).
+    query_variants = [query]
+    folded = _ascii_fold(query)
+    if folded != query:
+        query_variants.append(folded)
+
+    aggregated: list[tuple[str, str, str]] = []
+    seen: set[str] = set()
+
+    # 1) Birincil: DuckDuckGo (Bing indeksi ~ Google kapsamı), tüm yazımlar.
+    for q in query_variants:
+        for title, url, snippet in _search_duckduckgo(q):
+            key = url.split("#")[0].rstrip("/").lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            aggregated.append((title, url, snippet))
+
+    # 2) DuckDuckGo hiç sonuç vermediyse Mojeek + Google yedeğine düş.
+    if not aggregated:
+        for engine in (_search_mojeek, _search_google):
+            for q in query_variants:
+                try:
+                    items = engine(q)
+                except Exception:
+                    items = []
+                for title, url, snippet in items:
+                    key = url.split("#")[0].rstrip("/").lower()
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    aggregated.append((title, url, snippet))
+
+    if not aggregated:
+        return ("Arama sonucu bulunamadı. Sorguyu farklı kelimelerle veya ek "
+                "ipuçlarıyla (şehir, kurum, meslek) tekrar dene.")
+
+    # 1) Özet: başlık + snippet (sayfa açılamasa bile genelde soruyu yanıtlar)
+    summary_lines = []
+    for i, (title, url, snippet) in enumerate(aggregated[:10], 1):
+        line = f"{i}. {title}"
+        if snippet:
+            line += f" — {snippet}"
+        line += f"  ({url})"
+        summary_lines.append(line)
+    summary = ("ARAMA SONUÇLARI (birden çok arama motoru, "
+               f"{len(aggregated)} sonuç):\n" + "\n".join(summary_lines))
+
+    # 2) İlk 4 sayfayı derinlemesine oku
+    page_blocks = []
+    for title, url, snippet in aggregated[:4]:
+        try:
+            page_res = requests.get(url, headers=_SEARCH_HEADERS, timeout=6)
+            if page_res.status_code == 200:
+                page_soup = BeautifulSoup(page_res.text, "html.parser")
+                for element in page_soup(["script", "style", "nav", "footer",
+                                          "header", "noscript", "aside", "form"]):
+                    element.decompose()
+                text = " ".join(page_soup.get_text(separator=" ").split())[:2000]
+                if text:
+                    page_blocks.append(f"[Kaynak: {url}]\n{text}")
+        except Exception:
+            continue
+
+    parts = [summary]
+    if page_blocks:
+        parts.append("SAYFA İÇERİKLERİ:\n" + "\n\n---\n\n".join(page_blocks))
+    return "\n\n".join(parts)
+
+# ── Tool tanımları ──────────────────────────────────────────────────────────
+TOOL_DECLARATIONS = [
+    {
+        "name": "deep_web_search",
+        "description": (
+            "İnternette birden fazla kaynaktan derinlemesine arama yapar ve okur. "
+            "Bir KİŞİYİ (ünlü olmasa, sıradan/yerel biri olsa bile), şirketi, ürünü, "
+            "güncel olayı veya herhangi bir bilgiyi araştırmak için kullan. Kişi ararken "
+            "ismi, kullanıcının verdiği ipuçlarıyla (şehir, meslek, sendika, kurum) birlikte sorgula."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "query": {
+                    "type": "STRING",
+                    "description": "İnternette aranacak detaylı arama sorgusu"
+                }
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "generate_image",
+        "description": (
+            "Metin açıklamasından yeni bir görsel/resim oluşturur (Gemini/Imagen). "
+            "Kullanıcı 'görsel oluştur', 'resim çiz', 'logo tasarla', 'proje çizimi/tasarımı yap', "
+            "'konsept/şema çiz', 'şunun resmini yap' gibi bir şey istediğinde HEMEN kullan. "
+            "Oluşan görsel otomatik kaydedilir ve ekranda gösterilir."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "prompt": {
+                    "type": "STRING",
+                    "description": "Oluşturulacak görselin detaylı açıklaması (İngilizce daha iyi sonuç verir)."
+                }
+            },
+            "required": ["prompt"]
+        }
+    },
+    {
+        "name": "add_scheduled_task",
+        "description": (
+            "Zamanlanmış/tekrarlayan görev oluşturur. Kullanıcı 'her sabah 8'de hava durumu söyle', "
+            "'her gün 22:00 hatırlat' gibi bir şey istediğinde kullan. Vakti gelince EXON verilen "
+            "istemi otomatik, sesli olarak yerine getirir."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "time":   {"type": "STRING", "description": "Saat (24s), örn. '08:00'."},
+                "prompt": {"type": "STRING", "description": "Vakti gelince EXON'a verilecek istem, örn. 'Bana güncel hava durumunu söyle'."},
+                "repeat": {"type": "STRING", "description": "daily | once | weekdays. Varsayılan daily."}
+            },
+            "required": ["time", "prompt"]
+        }
+    },
+    {
+        "name": "list_scheduled_tasks",
+        "description": "Tüm zamanlanmış görevleri listeler.",
+        "parameters": {"type": "OBJECT", "properties": {}}
+    },
+    {
+        "name": "remove_scheduled_task",
+        "description": "Bir zamanlanmış görevi siler (görev id'si veya istemdeki bir kelime ile).",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {"identifier": {"type": "STRING", "description": "Görev id'si veya istemden bir kelime"}},
+            "required": ["identifier"]
+        }
+    },
+    {
+        "name": "recognize_face",
+        "description": (
+            "Web kamerasını açıp karşıdaki kişiyi yüz tanıma ile tanır. Kullanıcı 'beni tanı', "
+            "'yüz tanıma yap', 'kameradan giriş', 'kim olduğumu bul' dediğinde kullan."
+        ),
+        "parameters": {"type": "OBJECT", "properties": {}}
+    },
+    {
+        "name": "open_app",
+        "description": "Windows'ta herhangi bir uygulamayı açar. Spotify, Chrome, CMD, VS Code, Discord vb.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "app_name": {
+                    "type": "STRING",
+                    "description": "Uygulama adı (örn. 'Spotify', 'Chrome', 'CMD', 'Discord')"
+                }
+            },
+            "required": ["app_name"]
+        }
+    },
+    {
+        "name": "sys_info",
+        "description": "Sistem bilgisi alır: pil durumu, CPU, RAM, disk, saat, tarih, ağ bağlantısı.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "query": {
+                    "type": "STRING",
+                    "description": "battery | cpu | ram | disk | time | date | network | all"
+                }
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "get_weather",
+        "description": (
+            "Anlık hava durumunu özetler. Konum boş bırakılırsa kullanıcının IP tabanlı "
+            "otomatik konumu kullanılır. Kullanıcı hava durumunu, sıcaklığı veya yağmur "
+            "durumunu sorduğunda kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "location": {
+                    "type": "STRING",
+                    "description": "Şehir veya konum. Boş bırakılırsa otomatik konum kullanılır."
+                }
+            }
+        }
+    },
+    {
+        "name": "get_calendar_events",
+        "description": (
+            "Yerel takvimi okur (JSON tabanlı, Windows uyumlu). "
+            "Bugün, yarın, sıradaki etkinlik veya yaklaşan ajandayı özetler. "
+            "Kullanıcı toplantı, takvim, ajanda, etkinlik veya günlük programını sorduğunda kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "query": {
+                    "type": "STRING",
+                    "description": (
+                        "today | tomorrow | next | agenda | week veya doğal dilde "
+                        "'önümüzdeki 30 gün', '2 hafta', 'bu ay', 'gelecek ay'"
+                    )
+                },
+                "limit": {
+                    "type": "NUMBER",
+                    "description": "Maksimum etkinlik sayısı"
+                }
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "add_calendar_event",
+        "description": (
+            "Yerel takvime yeni etkinlik ekler (JSON tabanlı, Windows uyumlu). "
+            "Kullanıcı toplantı, randevu, takvime ekleme veya etkinlik oluşturma isterse kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "title":         {"type": "STRING", "description": "Etkinlik başlığı"},
+                "start_iso":     {"type": "STRING", "description": "Başlangıç ISO tarihi (YYYY-MM-DDTHH:MM)"},
+                "end_iso":       {"type": "STRING", "description": "Bitiş ISO tarihi. Opsiyonel."},
+                "location":      {"type": "STRING", "description": "Etkinlik konumu. Opsiyonel."},
+                "notes":         {"type": "STRING", "description": "Etkinlik notları. Opsiyonel."},
+                "calendar_name": {"type": "STRING", "description": "Takvim adı. Opsiyonel."},
+                "all_day":       {"type": "BOOLEAN", "description": "true ise tüm gün etkinliği."}
+            },
+            "required": ["title", "start_iso"]
+        }
+    },
+    {
+        "name": "delete_calendar_event",
+        "description": (
+            "Yerel takvimden etkinlik siler. "
+            "Kullanıcı bir toplantıyı, randevuyu veya takvim kaydını silmek istediğinde kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "title":              {"type": "STRING",  "description": "Silinecek etkinlik başlığı"},
+                "start_iso":          {"type": "STRING",  "description": "Opsiyonel tarih/saat"},
+                "calendar_name":      {"type": "STRING",  "description": "Opsiyonel takvim adı"},
+                "delete_all_matches": {"type": "BOOLEAN", "description": "true ise tüm eşleşenleri siler"}
+            },
+            "required": ["title"]
+        }
+    },
+    {
+        "name": "get_reminders",
+        "description": (
+            "Yerel hatırlatıcı listesini okur (JSON tabanlı, Windows uyumlu). "
+            "Bugünkü, yaklaşan, geciken veya tüm açık hatırlatıcıları özetler."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "query":     {"type": "STRING", "description": "today | upcoming | overdue | all | next"},
+                "limit":     {"type": "NUMBER", "description": "Maksimum hatırlatıcı sayısı"},
+                "list_name": {"type": "STRING", "description": "Belirli bir hatırlatıcı listesi adı"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "add_reminder",
+        "description": (
+            "Yerel hatırlatıcı sistemine yeni hatırlatıcı ekler (Windows uyumlu). "
+            "Kullanıcı 'hatırlat', 'hatırlatıcı ekle', 'reminder kur' dediğinde kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "title":     {"type": "STRING",  "description": "Hatırlatıcı başlığı"},
+                "due_iso":   {"type": "STRING",  "description": "Opsiyonel tarih/saat ISO formatında"},
+                "notes":     {"type": "STRING",  "description": "Opsiyonel not"},
+                "list_name": {"type": "STRING",  "description": "Opsiyonel liste adı"},
+                "priority":  {"type": "STRING",  "description": "low | medium | high"},
+                "all_day":   {"type": "BOOLEAN", "description": "Tüm gün hatırlatıcı ise true"}
+            },
+            "required": ["title"]
+        }
+    },
+    {
+        "name": "browser_control",
+        "description": "Tarayıcıda URL açar, Google'da arama yapar veya YouTube'da ilk sonucu doğrudan oynatır.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "open_url | search | play_youtube"},
+                "url":    {"type": "STRING", "description": "Açılacak URL (open_url için)"},
+                "query":  {"type": "STRING", "description": "Arama sorgusu (search veya play_youtube için)"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "shell_run",
+        "description": "Windows CMD veya PowerShell komutu çalıştırır. Dosya işlemleri, sistem yönetimi.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "command": {
+                    "type": "STRING",
+                    "description": "Çalıştırılacak CMD veya PowerShell komutu"
+                }
+            },
+            "required": ["command"]
+        }
+    },
+    {
+        "name": "play_media",
+        "description": (
+            "YouTube, Spotify veya Windows Media Player'da şarkı, müzik veya video açar. "
+            "Kullanıcı belirli bir platform söylerse onu kullan. "
+            "Belirtmezse Spotify varsa onu, yoksa YouTube'u kullan. "
+            "Kullanıcı 'çal', 'oynat', 'aç' diyorsa autoplay=true kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "query":    {"type": "STRING",  "description": "Şarkı, sanatçı, albüm veya video arama"},
+                "provider": {"type": "STRING",  "description": "auto | youtube | spotify | windows_media"},
+                "autoplay": {"type": "BOOLEAN", "description": "true ise mümkünse doğrudan oynatır"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "get_youtube_channel_report",
+        "description": (
+            "YouTube kanalının public istatistiklerini ve son videoların performansını raporlar."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "query":       {"type": "STRING", "description": "Doğal dilde analiz isteği"},
+                "handle":      {"type": "STRING", "description": "Opsiyonel kanal handle veya ID"},
+                "video_limit": {"type": "NUMBER", "description": "Analize dahil edilecek son video sayısı"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "analyze_screen",
+        "description": (
+            "Aktif pencerenin ekran görüntünü alıp Gemini vision ile analiz eder. "
+            "Kullanıcı ekranda ne olduğunu, bir hatayı, görünen metni sorduğunda kullan. "
+            "Windows'ta PIL.ImageGrab + win32gui kullanılır (pywin32 gerekli)."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "query":  {"type": "STRING", "description": "Kullanıcının ekranla ilgili sorusu"},
+                "target": {"type": "STRING", "description": "Şu an sadece active_window desteklenir."}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "save_memory",
+        "description": "Kullanıcı hakkında önemli bilgiyi kalıcı belleğe kaydeder. İsim, tercihler, projeler vb. duyunca sessizce çağır.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "category": {"type": "STRING", "description": "identity | preferences | projects | notes"},
+                "key":      {"type": "STRING", "description": "Kısa anahtar (örn. 'name')"},
+                "value":    {"type": "STRING", "description": "Değer (İngilizce)"}
+            },
+            "required": ["category", "key", "value"]
+        }
+    },
+    {
+        "name": "delete_memory",
+        "description": (
+            "Kalıcı hafızadaki bir kaydı siler. "
+            "Kullanıcı 'bunu hafızandan kaldır', 'unut', 'sil' gibi bir şey derse kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "category":   {"type": "STRING", "description": "Kaydın kategorisi"},
+                "key":        {"type": "STRING", "description": "Silinecek anahtar"},
+                "match_text": {"type": "STRING", "description": "Kaydı bulmak için doğal dil parçası"}
+            }
+        }
+    },
+    {
+        "name": "send_whatsapp_message",
+        "description": (
+            "WhatsApp Desktop URL scheme veya WhatsApp Web üzerinden mesaj taslağı açar veya gönderir. "
+            "Kişi adı veya telefon numarasıyla çalışabilir. "
+            "Windows'ta pyautogui ile otomatik gönderim yapılır."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "recipient_name": {"type": "STRING",  "description": "Kişi adı"},
+                "phone_number":   {"type": "STRING",  "description": "Uluslararası telefon numarası"},
+                "message":        {"type": "STRING",  "description": "Gönderilecek mesaj"},
+                "app_target":     {"type": "STRING",  "description": "desktop | web | auto"},
+                "send_now":       {"type": "BOOLEAN", "description": "true ise mesajı otomatik gönderir"}
+            },
+            "required": ["message"]
+        }
+    },
+    {
+        "name": "save_whatsapp_contact",
+        "description": "Sık kullanılan bir WhatsApp kişisini adı ve telefon numarasıyla kalıcı belleğe kaydeder.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "display_name": {"type": "STRING", "description": "Kişi adı"},
+                "phone_number": {"type": "STRING", "description": "Uluslararası telefon numarası"},
+                "aliases":      {"type": "STRING", "description": "Virgülle ayrılmış takma adlar"}
+            },
+            "required": ["display_name", "phone_number"]
+        }
+    }
+]
+
+
+def get_api_key() -> str:
+    return str(get_app_config_value("gemini_api_key", "") or "")
+
+
+def load_system_prompt() -> str:
+    # Kullanıcının talep ettiği araştırma, mühendislik, konum ve görsel kuralları entegre edildi
+    return (
+        "Sen EXON'sun — Windows'ta çalışan, web araştırma ve görsel yeteneklerine sahip "
+        "profesyonel kişisel AI asistanı. Türkçe konuş. Net, bilgi yoğunluğu yüksek yanıtlar ver.\n\n"
+        "[ARAŞTIRMA KURALLARI]\n"
+        "- Kullanıcı güncel bilgi, haber, teknoloji, kişi, şirket veya ürün sorduğunda 'deep_web_search' "
+        "aracını mutlaka kullan. Bu araç TÜM web genelinde (DuckDuckGo + Mojeek + Google) arar; "
+        "tek bir siteye (Instagram/YouTube vb.) takılma, dönen TÜM kaynakları değerlendir.\n"
+        "- Bilgi/araştırma için DAİMA 'deep_web_search' kullan. 'browser_control' YALNIZCA kullanıcı "
+        "açıkça bir siteyi 'aç' veya bir videoyu 'oynat/çal' dediğinde kullanılır; araştırma için DEĞİL.\n"
+        "- Tek bir kaynağa güvenme; birden fazla kaynaktan doğrulama yap.\n"
+        "- Bulduğun bilgileri özetle, karşılaştır ve anlaşılır şekilde sözlü olarak açıkla.\n"
+        "- Emin olmadığın bilgiyi kesin gerçek gibi sunma. Kaynaklar çelişiyorsa bunu belirt.\n\n"
+        "[KİŞİ ARAŞTIRMASI — ÖNEMLİ]\n"
+        "- Kullanıcı herhangi bir kişinin adını sorduğunda — ÜNLÜ OLMASA, sıradan/yerel biri olsa bile — "
+        "ÖNCE 'deep_web_search' aracını çağır ve internette ara. Önden reddetme veya 'bilemem' deme.\n"
+        "- Arama aracı zaten tüm web'i (Google'a denk indeks) tarar ve ismi hem Türkçe karakterli hem "
+        "karaktersiz (Kanğal=Kangal) otomatik dener; sen sadece kişinin adını (varsa ipucuyla) ver.\n"
+        "- İlk aramada kişi net çıkmazsa PES ETME: farklı sorgularla 2-3 kez daha ara "
+        "(yalnız isim; isim + şehir; isim + meslek; isim + kurum/sendika örn. 'yol iş sendikası').\n"
+        "- Dönen sonuçlar bir Instagram/Facebook/Twitter/okul/meslek kaydı bile olsa bunu kişinin "
+        "bilgisi olarak SOMUT şekilde ilet (örn. '@servankangal Instagram hesabı: 5 gönderi; "
+        "Diyarbakır Hürriyet Koleji öğrencisi olarak da geçiyor'). Sosyal medya sonucunu küçümseme.\n"
+        "- Gizlilik gerekçesiyle reddetme — bunlar zaten halka açık bilgiler. Sadece gerçekten hiçbir "
+        "şey bulunmazsa hangi sorguları denediğini söyleyip 'sonuç bulamadım' de. Uydurma yapma.\n\n"
+        "[PROJE VE MÜHENDİSLİK KURALLARI]\n"
+        "- Kullanıcı bir proje, makine, fabrika, robot, elektronik veya yazılım sistemi sorduğunda "
+        "ayrıntılı teknik açıklama ver.\n"
+        "- Tasarım, malzeme, maliyet, üretim aşamaları, yazılım mimarisi, test süreci ve bakım "
+        "süreçlerini gerekirse ayrı ayrı, mantıksal sırayla açıkla.\n"
+        "- Eksik bilgi varsa varsayım yaptığını belirt. Hata ihtimalini azaltmak için alternatif "
+        "yöntemler ve riskleri açıkla. Gerekli kodları eksiksiz ver.\n\n"
+        "[KONUM VE HAVA DURUMU]\n"
+        "- Kullanıcının konumu IP üzerinden otomatik tespit edilir. Hava durumu sorulduğunda "
+        "'get_weather' aracını konum vermeden çağır; otomatik konum kullanılır.\n\n"
+        "[GÖRSEL OLUŞTURMA]\n"
+        "- Kullanıcı görsel/resim/çizim/tasarım/konsept/logo/proje çizimi/şema isterse HEMEN "
+        "'generate_image' aracını çağır (ayrıntılı İngilizce bir prompt ile); açıklama yapıp "
+        "beklemeden görseli üret.\n"
+        "- Kullanıcı bir proje tasarımı veya çizimi istediğinde: önce anında bir görsel oluştur, "
+        "sonra kullanıcıya 2-3 alternatif varyasyon/yön öner ve hangisini detaylandırmak istediğini sor.\n"
+        "- Görsel üretimi başarısız olursa araç sana gerçek hata sebebini döndürür; bunu kullanıcıya "
+        "açıkça söyle ('teknik sorun' gibi belirsiz ifade kullanma).\n"
+        "- Kullanıcı bir görsel yüklediğinde içeriği analiz edilip sana iletilir; bunu yorumla.\n\n"
+        "[OTOMASYON VE TANIMA]\n"
+        "- Kullanıcı 'her sabah 8'de ...', 'her gün şu saatte ...' gibi tekrarlayan bir istek "
+        "verirse 'add_scheduled_task' kullan (saat + yapılacak istem). Görevleri 'list_scheduled_tasks' "
+        "ile listele, 'remove_scheduled_task' ile sil.\n"
+        "- Kullanıcı 'beni tanı', 'yüz tanıma', 'kameradan kim olduğumu bul' derse 'recognize_face' kullan.\n\n"
+        "[YANIT KALİTESİ]\n"
+        "- Kısa cevap yerine bilgi yoğun cevaplar ver; gerekirse liste ve adım adım anlat.\n"
+        "- Kullanıcı istemedikçe önemli ayrıntıları atlama."
+    )
+
+
+class ExonLive:
+    def __init__(self, ui: ExonUI):
+        self.ui             = ui
+        self.session        = None
+        self.audio_in_queue = None
+        self.out_queue      = None
+        self._loop          = None
+        self._is_speaking   = False
+        self._speaking_lock = threading.Lock()
+
+        self.ui.on_text_command  = self._on_text_command
+        self.ui.on_pause_toggle  = self._on_pause_toggle
+        self.ui.on_effects_state_change = self._on_effects_state_change
+        self.ui.on_image_uploaded = self._on_image_uploaded
+        self._paused             = False
+
+        # ── İleri seviye alt sistemler (hepsi opsiyonel, yoksa sessizce devre dışı) ──
+        self.wake      = WakeWordListener()
+        self.scheduler = TaskScheduler(self._on_scheduled_task)
+        self.face      = FaceAuth()
+        self.telegram  = TelegramBridge(self._handle_remote_command)
+        self.discord   = DiscordBridge(self._handle_remote_command)
+        self._services_started = False
+
+        # Uyandırma sözcüğü aktifse arka planda standby (mikrofon kapalı) başla
+        if self.wake.enabled:
+            self.ui.muted = True
+            try:
+                self.ui.root.after(0, self.ui._draw_mute_button)
+            except Exception:
+                pass
+
+    def _on_pause_toggle(self, paused: bool):
+        self._paused = paused
+
+    def _on_effects_state_change(self, enabled: bool):
+        pass
+
+    def _focus_ui_section_for_tool(self, tool_name: str, args: dict):
+        if tool_name == "sys_info":
+            query = str(args.get("query", "")).strip().lower()
+            if query in {"time", "saat", "zaman", "date", "tarih"}:
+                self.ui.focus_panel("time", duration_ms=5200)
+            else:
+                self.ui.focus_panel("system", duration_ms=5200)
+        elif tool_name == "get_weather":
+            self.ui.focus_panel("weather", duration_ms=5600)
+
+    def _on_text_command(self, text: str):
+        if self._paused:
+            return
+        self.ui.write_log(f"Siz: {text}")
+        if not self._loop or not self.session:
+            self.ui.write_log("ERR: EXON bağlantısı henüz hazır değil.")
+            return
+        asyncio.run_coroutine_threadsafe(
+            self.session.send_client_content(
+                turns={"parts": [{"text": text}]},
+                turn_complete=True
+            ),
+            self._loop
+        )
+
+    def _on_image_uploaded(self, image_path: str, query: str = ""):
+        """UI'dan görsel yüklendiğinde çağrılır: analiz et ve sesli yanıt için oturuma ilet."""
+        if self._paused:
+            self.ui.write_log("SYS: EXON duraklatılmış. Görseli işlemek için devam et.")
+            return
+        threading.Thread(
+            target=self._process_uploaded_image,
+            args=(image_path, query),
+            daemon=True,
+        ).start()
+
+    def _process_uploaded_image(self, image_path: str, query: str = ""):
+        self.ui.set_state("THINKING")
+        q = query.strip() if query else "Bu görselde ne var? Detaylı açıkla."
+        try:
+            analysis = analyze_image_file(image_path, q)
+        except Exception as e:
+            analysis = f"Görsel analizi başarısız: {e}"
+        self.ui.write_log(f"EXON (görsel): {analysis}")
+        if self._loop and self.session:
+            msg = (
+                "Kullanıcı bir görsel yükledi. Otomatik görsel analizi şu şekilde:\n"
+                f"{analysis}\n\n"
+                "Bu analizi kullanıcıya kısa, net ve Türkçe olarak sesli açıkla."
+            )
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    self.session.send_client_content(
+                        turns={"parts": [{"text": msg}]},
+                        turn_complete=True,
+                    ),
+                    self._loop,
+                )
+            except Exception:
+                pass
+
+    # ── İleri seviye: uyandırma / planlayıcı / uzaktan komut ─────────────────
+    def _send_to_session(self, text: str):
+        """Verilen metni canlı oturuma iletir (EXON sesli yanıtlar)."""
+        if self._loop and self.session:
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    self.session.send_client_content(
+                        turns={"parts": [{"text": text}]}, turn_complete=True),
+                    self._loop,
+                )
+            except Exception:
+                pass
+
+    async def _wake_up(self):
+        """'Hey EXON' algılandığında: standby'dan çık ve 'Efendim?' de."""
+        self.ui.muted = False
+        try:
+            self.ui.root.after(0, self.ui._draw_mute_button)
+        except Exception:
+            pass
+        self.ui.write_log("SYS: 🔔 'Hey EXON' algılandı. Efendim?")
+        self.ui.play_success_sfx()
+        if self.session:
+            try:
+                await self.session.send_client_content(
+                    turns={"parts": [{"text": (
+                        "Kullanıcı seni 'Hey EXON' diyerek çağırdı. Çok kısa, sıcak ve "
+                        "kibar bir tonla sadece 'Efendim?' diye yanıt ver."
+                    )}]},
+                    turn_complete=True,
+                )
+            except Exception:
+                pass
+
+    def _on_scheduled_task(self, task: dict):
+        """Zamanlanmış görev vakti geldiğinde (scheduler thread'inden) çağrılır."""
+        prompt = task.get("prompt", "")
+        self.ui.write_log(f"SYS: ⏰ Zamanlanmış görev: {prompt}")
+        if self.ui.muted:                       # standby ise uyandır
+            self.ui.muted = False
+            try:
+                self.ui.root.after(0, self.ui._draw_mute_button)
+            except Exception:
+                pass
+        self._send_to_session(prompt)
+
+    def _gemini_text_answer(self, text: str) -> str:
+        """Telegram/Discord için Gemini metin yanıtı (EXON kişiliğiyle)."""
+        try:
+            client = genai.Client(api_key=get_api_key())
+            resp = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=text,
+                config=types.GenerateContentConfig(
+                    system_instruction=load_system_prompt(), temperature=0.6),
+            )
+            return (getattr(resp, "text", "") or "Yanıt alınamadı.").strip()
+        except Exception as exc:
+            return f"Yanıt alınamadı: {exc}"
+
+    def _handle_remote_command(self, text: str) -> dict:
+        """Telegram/Discord'dan gelen komutu işler. {'text':..., 'image':...} döner."""
+        text = (text or "").strip()
+        low = text.lower()
+        self.ui.write_log(f"SYS: 📲 Uzaktan komut: {text[:60]}")
+
+        if low in ("/start", "/help", "yardım"):
+            return {"text": ("EXON uzaktan komut 🤖\n"
+                             "/gorsel <açıklama> — görsel oluştur\n"
+                             "/hava [şehir] — hava durumu\n"
+                             "/ara <konu> — web araştırması\n"
+                             "Ya da doğrudan sorunu yaz.")}
+
+        if low.startswith(("/gorsel", "/görsel", "/image")) or "görsel oluştur" in low or "resim çiz" in low:
+            prompt = text.split(" ", 1)[1].strip() if " " in text else ""
+            if not prompt:
+                return {"text": "Kullanım: /gorsel <açıklama>"}
+            res = generate_image(prompt)
+            if res.get("ok") and res.get("path"):
+                return {"text": f"İşte '{prompt}' görseli ✅", "image": res["path"]}
+            return {"text": res.get("message", "Görsel oluşturulamadı.")}
+
+        if low.startswith("/hava") or "hava durumu" in low:
+            city = text.split(" ", 1)[1].strip() if " " in text else None
+            return {"text": get_weather_summary(city)}
+
+        if low.startswith("/ara") or low.startswith("ara ") or low.startswith("araştır"):
+            q = text.split(" ", 1)[1].strip() if " " in text else ""
+            if not q:
+                return {"text": "Kullanım: /ara <konu veya kişi>"}
+            return {"text": perform_web_scrape_search(q)[:3500]}
+
+        return {"text": self._gemini_text_answer(text)}
+
+    async def _interrupt_audio(self):
+        try:
+            if self.audio_in_queue:
+                while not self.audio_in_queue.empty():
+                    try:
+                        self.audio_in_queue.get_nowait()
+                    except Exception:
+                        break
+            if self.session:
+                await self.session.send_realtime_input(audio_stream_end=True)
+            self.set_speaking(False)
+        except Exception:
+            pass
+
+    def set_speaking(self, value: bool):
+        with self._speaking_lock:
+            self._is_speaking = value
+        if value:
+            self.ui.set_state("SPEAKING")
+        else:
+            self.ui.set_state("LISTENING")
+
+    def speak_error(self, tool_name: str, error: str):
+        short = str(error)[:120]
+        self.ui.write_log(f"ERR: {tool_name} — {short}")
+        self.ui.write_debug(f"{tool_name}: {short}", level="ERROR")
+        self.ui.set_state("ERROR")
+
+    @staticmethod
+    def _result_looks_like_error(result) -> bool:
+        text = str(result or "").strip()
+        if not text:
+            return False
+        low = text.lower()
+        # Açık hata öneki her zaman hatadır.
+        if low.startswith("hata:") or low.startswith("err:"):
+            return True
+        # Uzun içerik (web arama sonucu, ekran/görsel analizi vb.) içinde 'hata',
+        # 'error' gibi kelimeler geçse bile HATA SAYILMAZ — bu yanlış alarmları önler.
+        if len(text) > 200:
+            return False
+        # Kısa mesajlarda yalnızca gerçek başarısızlık kalıplarını hata say.
+        failure_markers = (
+            "alınamadı", "alinamadi", "bulunamadı", "bulunamadi",
+            "açılamadı", "acilamadi", "tamamlanamadı", "tamamlanamadi",
+            "oluşturulamadı", "olusturulamadi", "okunamadı", "okunamadi",
+            "erişilemedi", "erisilemedi", "geçersiz", "gecersiz",
+            "api anahtarı eksik", "izin gerek",
+        )
+        return any(marker in low for marker in failure_markers)
+
+    @staticmethod
+    def _should_play_success_sfx(tool_name: str, args: dict, result) -> bool:
+        action_tools = {"open_app", "add_calendar_event", "add_reminder", "delete_calendar_event"}
+        if tool_name in action_tools:
+            return True
+        if tool_name == "send_whatsapp_message":
+            text = str(result or "").lower()
+            if bool(args.get("send_now", False)):
+                return "gönderildi" in text or "gonderildi" in text
+            return False
+        return False
+
+    @staticmethod
+    def _clean_transcript_text(text: str) -> tuple[str, bool]:
+        raw      = str(text or "")
+        had_noise = False
+        if CONTROL_TOKEN_RE.search(raw):
+            had_noise = True
+            raw = CONTROL_TOKEN_RE.sub(" ", raw)
+        cleaned = []
+        for ch in raw:
+            if ch in "\n\r\t" or ord(ch) >= 32:
+                cleaned.append(ch)
+            else:
+                had_noise = True
+        normalized = " ".join("".join(cleaned).split())
+        return normalized.strip(), had_noise
+
+    def _build_config(self) -> types.LiveConnectConfig:
+        memory  = load_memory()
+        mem_str = format_memory_for_prompt(memory)
+        sys_p   = load_system_prompt()
+        now     = datetime.datetime.now()
+        time_ctx = f"[ŞU ANKİ ZAMAN]\n{now.strftime('%A, %d %B %Y — %H:%M')}\n\n"
+
+        parts = [time_ctx]
+        if mem_str:
+            parts.append(mem_str + "\n\n")
+        parts.append(sys_p)
+
+        return types.LiveConnectConfig(
+            response_modalities=["AUDIO"],
+            output_audio_transcription={},
+            input_audio_transcription={},
+            system_instruction="\n".join(parts),
+            tools=[{"function_declarations": TOOL_DECLARATIONS}],
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name=str(get_app_config_value("voice", "Charon") or "Charon")
+                    )
+                )
+            ),
+        )
+
+    async def _execute_tool(self, fc) -> types.FunctionResponse:
+        name = fc.name
+        args = dict(fc.args or {})
+        print(f"[EXON] 🔧 {name} {args}")
+        self.ui.set_state("THINKING")
+
+        loop   = asyncio.get_event_loop()
+        result = "Tamam."
+        had_exception = False
+
+        try:
+            if name == "deep_web_search":
+                r = await loop.run_in_executor(None, lambda: perform_web_scrape_search(args.get("query", "")))
+                result = r or "Arama yapıldı ancak veri döndürülemedi."
+
+            elif name == "generate_image":
+                res = await loop.run_in_executor(
+                    None, lambda: generate_image(args.get("prompt", "")))
+                if res.get("ok") and res.get("path"):
+                    self.ui.show_image_preview(res["path"], title="EXON · Oluşturulan Görsel")
+                    self.ui.play_success_sfx()
+                result = res.get("message", "Görsel işlemi tamamlandı.")
+
+            elif name == "add_scheduled_task":
+                task = self.scheduler.add_task(
+                    args.get("time", ""), args.get("prompt", ""),
+                    args.get("repeat", "daily"))
+                result = (f"Görev eklendi: {task['time']} ({task['repeat']}) → {task['prompt']}")
+
+            elif name == "list_scheduled_tasks":
+                tasks = self.scheduler.list_tasks()
+                if not tasks:
+                    result = "Zamanlanmış görev yok."
+                else:
+                    result = "Zamanlanmış görevler:\n" + "\n".join(
+                        f"- [{t['id']}] {t['time']} ({t['repeat']}): {t['prompt']}"
+                        for t in tasks)
+
+            elif name == "remove_scheduled_task":
+                removed = self.scheduler.remove_task(args.get("identifier", ""))
+                result = f"{removed} görev silindi." if removed else "Eşleşen görev bulunamadı."
+
+            elif name == "recognize_face":
+                r = await loop.run_in_executor(None, self.face.recognize_summary)
+                result = r or "Yüz tanıma tamamlanamadı."
+
+            elif name == "save_memory":
+                cat = args.get("category", "notes")
+                key = args.get("key", "")
+                val = args.get("value", "")
+                if key and val:
+                    update_memory({cat: {key: {"value": val}}})
+                    print(f"[Memory] 💾 {cat}/{key} = {val}")
+                result = "ok"
+
+            elif name == "delete_memory":
+                result = delete_memory(
+                    args.get("category", ""),
+                    args.get("key", ""),
+                    args.get("match_text", ""),
+                )
+
+            elif name == "open_app":
+                r = await loop.run_in_executor(None, lambda: open_app(args.get("app_name", "")))
+                result = r or f"{args.get('app_name')} açıldı."
+
+            elif name == "sys_info":
+                self._focus_ui_section_for_tool(name, args)
+                r = await loop.run_in_executor(None, lambda: sys_info(args.get("query", "all")))
+                result = r or "Bilgi alındı."
+
+            elif name == "get_weather":
+                self._focus_ui_section_for_tool(name, args)
+                r = await loop.run_in_executor(
+                    None, lambda: get_weather_summary(args.get("location") or None))
+                result = r or "Hava durumu bilgisi alındı."
+
+            elif name == "get_calendar_events":
+                r = await loop.run_in_executor(
+                    None, lambda: get_calendar_events(
+                        args.get("query", "today"),
+                        int(args.get("limit", 6) or 6),
+                    ))
+                result = r or "Takvim bilgisi alındı."
+
+            elif name == "add_calendar_event":
+                r = await loop.run_in_executor(
+                    None, lambda: add_calendar_event(
+                        args.get("title", ""),
+                        args.get("start_iso", ""),
+                        args.get("end_iso", ""),
+                        args.get("notes", ""),
+                        args.get("location", ""),
+                        args.get("calendar_name", ""),
+                        bool(args.get("all_day", False)),
+                    ))
+                result = r or "Takvim etkinliği eklendi."
+
+            elif name == "delete_calendar_event":
+                r = await loop.run_in_executor(
+                    None, lambda: delete_calendar_event(
+                        args.get("title", ""),
+                        args.get("start_iso", ""),
+                        args.get("calendar_name", ""),
+                        bool(args.get("delete_all_matches", False)),
+                    ))
+                result = r or "Takvim etkinliği silindi."
+
+            elif name == "get_reminders":
+                r = await loop.run_in_executor(
+                    None, lambda: get_reminders(
+                        args.get("query", "upcoming"),
+                        int(args.get("limit", 8) or 8),
+                        args.get("list_name", ""),
+                    ))
+                result = r or "Hatırlatıcı bilgisi alındı."
+
+            elif name == "add_reminder":
+                r = await loop.run_in_executor(
+                    None, lambda: add_reminder(
+                        args.get("title", ""),
+                        args.get("due_iso", ""),
+                        args.get("notes", ""),
+                        args.get("list_name", ""),
+                        args.get("priority", ""),
+                        bool(args.get("all_day", False)),
+                    ))
+                result = r or "Hatırlatıcı eklendi."
+
+            elif name == "browser_control":
+                r = await loop.run_in_executor(
+                    None, lambda: browser_control(
+                        args.get("action"),
+                        args.get("url"),
+                        args.get("query"),
+                    ))
+                result = r or "Tamam."
+
+            elif name == "shell_run":
+                r = await loop.run_in_executor(
+                    None, lambda: shell_run(args.get("command", "")))
+                result = r or "Komut çalıştırıldı."
+
+            elif name == "play_media":
+                r = await loop.run_in_executor(
+                    None, lambda: play_media(
+                        args.get("query", ""),
+                        args.get("provider", "auto"),
+                        bool(args.get("autoplay", True)),
+                    ))
+                result = r or "Medya oynatma başlatıldı."
+
+            elif name == "get_youtube_channel_report":
+                r = await loop.run_in_executor(
+                    None, lambda: get_youtube_channel_report(
+                        args.get("query", "overview"),
+                        args.get("handle", ""),
+                        int(args.get("video_limit", 6) or 6),
+                    ))
+                result = r or "YouTube kanal raporu alındı."
+
+            elif name == "analyze_screen":
+                r = await loop.run_in_executor(
+                    None, lambda: analyze_screen(
+                        args.get("query", "Ekranda ne var?"),
+                        args.get("target", "active_window"),
+                    ))
+                result = r or "Ekran analizi tamamlandı."
+
+            elif name == "send_whatsapp_message":
+                r = await loop.run_in_executor(
+                    None, lambda: send_whatsapp_message(
+                        args.get("message", ""),
+                        args.get("phone_number", ""),
+                        args.get("recipient_name", ""),
+                        bool(args.get("send_now", False)),
+                        args.get("app_target", "auto"),
+                    ))
+                result = r or "WhatsApp işlemi tamamlandı."
+
+            elif name == "save_whatsapp_contact":
+                r = await loop.run_in_executor(
+                    None, lambda: save_whatsapp_contact(
+                        args.get("display_name", ""),
+                        args.get("phone_number", ""),
+                        args.get("aliases", ""),
+                    ))
+                result = r or "WhatsApp kişisi kaydedildi."
+
+            else:
+                result = f"Bilinmeyen araç: {name}"
+
+        except Exception as e:
+            result = f"Hata: {e}"
+            had_exception = True
+            traceback.print_exc()
+            self.speak_error(name, e)
+
+        tool_failed = self._result_looks_like_error(result)
+        if tool_failed:
+            if not had_exception:
+                self.ui.set_state("ERROR")
+        elif self._should_play_success_sfx(name, args, result):
+            self.ui.play_success_sfx()
+
+        if not tool_failed and not self.ui.muted:
+            self.ui.set_state("LISTENING")
+
+        print(f"[EXON] 📤 {name} → {str(result)[:80]}")
+        return types.FunctionResponse(
+            id=fc.id, name=name,
+            response={"result": result}
+        )
+
+    async def _send_realtime(self):
+        while True:
+            msg = await self.out_queue.get()
+            await self.session.send_realtime_input(media=msg)
+
+    async def _listen_audio(self):
+        print("[EXON] 🎤 Mikrofon başladı")
+        stream = await asyncio.to_thread(
+            pya.open,
+            format=FORMAT, channels=CHANNELS,
+            rate=SEND_SAMPLE_RATE, input=True,
+            frames_per_buffer=CHUNK_SIZE,
+        )
+        try:
+            while True:
+                data = await asyncio.to_thread(stream.read, CHUNK_SIZE, exception_on_overflow=False)
+                # Standby (mikrofon kapalı) + uyandırma aktifse: 'Hey EXON' dinle
+                if self.wake.enabled and self.ui.muted and not self._paused:
+                    try:
+                        if self.wake.process(data):
+                            await self._wake_up()
+                    except Exception:
+                        pass
+                    continue
+                with self._speaking_lock:
+                    exon_speaking = self._is_speaking
+                if not exon_speaking and not self.ui.muted and not self._paused:
+                    await self.out_queue.put({"data": data, "mime_type": "audio/pcm"})
+        except Exception as e:
+            print(f"[EXON] ❌ Mikrofon: {e}")
+            raise
+        finally:
+            stream.close()
+
+    async def _receive_audio(self):
+        print("[EXON] 👂 Alım başladı")
+        out_buf, in_buf = [], []
+        output_noise = False
+        output_noise_samples = []
+        try:
+            while True:
+                async for response in self.session.receive():
+                    if response.data:
+                        self.audio_in_queue.put_nowait(response.data)
+
+                    if response.server_content:
+                        sc = response.server_content
+
+                        if sc.output_transcription and sc.output_transcription.text:
+                            self.set_speaking(True)
+                            raw_txt = sc.output_transcription.text.strip()
+                            if raw_txt:
+                                txt, had_noise = self._clean_transcript_text(raw_txt)
+                                if had_noise:
+                                    output_noise = True
+                                    if len(output_noise_samples) < 4:
+                                        output_noise_samples.append(raw_txt)
+                                if txt:
+                                    out_buf.append(txt)
+
+                        if sc.input_transcription and sc.input_transcription.text:
+                            txt = sc.input_transcription.text.strip()
+                            if txt:
+                                in_buf.append(txt)
+                                self.ui.mark_user_activity(True)
+
+                        if sc.turn_complete:
+                            self.set_speaking(False)
+                            full_in = " ".join(in_buf).strip()
+                            if full_in:
+                                self.ui.write_log(f"Siz: {full_in}")
+                            in_buf = []
+                            full_out = " ".join(out_buf).strip()
+                            if full_out:
+                                self.ui.write_log(f"EXON: {full_out}")
+                                if output_noise_samples:
+                                    self.ui.write_debug(
+                                        "Kısmen filtrelenen ses transcripti: " + " | ".join(output_noise_samples),
+                                        level="WARN",
+                                    )
+                            elif output_noise:
+                                # Native-audio modeli zaman zaman yalnızca <ctrl> kontrol
+                                # token'ı üretir. Ses normal çalar; bu bir hata DEĞİLDİR,
+                                # sadece transcript gürültüsüdür. ERROR durumuna geçme.
+                                if output_noise_samples:
+                                    self.ui.write_debug(
+                                        "Filtrelenen transcript gürültüsü (hata değil): "
+                                        + " | ".join(output_noise_samples),
+                                        level="WARN",
+                                    )
+                            out_buf = []
+                            output_noise = False
+                            output_noise_samples = []
+
+                    if response.tool_call:
+                        fn_responses = []
+                        for fc in response.tool_call.function_calls:
+                            print(f"[EXON] 📞 {fc.name}")
+                            fr = await self._execute_tool(fc)
+                            fn_responses.append(fr)
+                        await self.session.send_tool_response(function_responses=fn_responses)
+
+        except Exception as e:
+            print(f"[EXON] ❌ Alım: {e}")
+            traceback.print_exc()
+            raise
+
+    async def _play_audio(self):
+        print("[EXON] 🔊 Ses çalma başladı")
+        stream = await asyncio.to_thread(
+            pya.open,
+            format=FORMAT, channels=CHANNELS,
+            rate=RECV_SAMPLE_RATE, output=True,
+        )
+        try:
+            while True:
+                chunk = await self.audio_in_queue.get()
+                self.set_speaking(True)
+                await asyncio.to_thread(stream.write, chunk)
+        except Exception as e:
+            print(f"[EXON] ❌ Ses: {e}")
+            raise
+        finally:
+            self.set_speaking(False)
+            stream.close()
+
+    def _start_background_services(self):
+        """Planlayıcı + Telegram + Discord köprülerini bir kez başlatır."""
+        if self._services_started:
+            return
+        self._services_started = True
+        try:
+            self.scheduler.start()
+            n = len(self.scheduler.list_tasks())
+            if n:
+                self.ui.write_log(f"SYS: ⏰ Planlayıcı aktif ({n} görev).")
+        except Exception:
+            pass
+        try:
+            if self.telegram.enabled:
+                self.telegram.start()
+                self.ui.write_log("SYS: 📲 Telegram köprüsü aktif.")
+        except Exception:
+            pass
+        try:
+            if self.discord.enabled:
+                self.discord.start()
+                self.ui.write_log("SYS: 📲 Discord köprüsü aktif.")
+        except Exception:
+            pass
+        if self.wake.enabled:
+            self.ui.write_log(f"SYS: 🔔 Uyandırma sözcüğü hazır: {self.wake.label}")
+
+    async def run(self):
+        client = genai.Client(
+            api_key=get_api_key(),
+            http_options={"api_version": "v1alpha"}
+        )
+
+        while True:
+            if self._paused:
+                await asyncio.sleep(1)
+                continue
+
+            try:
+                print("[EXON] 🔌 Bağlanıyor...")
+                self.ui.set_state("THINKING")
+                config = self._build_config()
+
+                async with (
+                    client.aio.live.connect(model=LIVE_MODEL, config=config) as session,
+                    asyncio.TaskGroup() as tg,
+                ):
+                    self.session        = session
+                    self._loop          = asyncio.get_event_loop()
+                    self.audio_in_queue = asyncio.Queue()
+                    self.out_queue      = asyncio.Queue(maxsize=10)
+
+                    print("[EXON] ✅ Bağlandı.")
+                    self.ui.set_state("LISTENING")
+                    self._start_background_services()
+                    if self.wake.enabled and self.ui.muted:
+                        self.ui.write_log(
+                            f"SYS: EXON hazır (standby). Uyandırmak için '{self.wake.label}' de.")
+                    else:
+                        self.ui.write_log("SYS: EXON hazır. Dinliyorum...")
+
+                    tg.create_task(self._send_realtime())
+                    tg.create_task(self._listen_audio())
+                    tg.create_task(self._receive_audio())
+                    tg.create_task(self._play_audio())
+
+            except Exception as e:
+                print(f"[EXON] ⚠️ {e}")
+                traceback.print_exc()
+                self.set_speaking(False)
+                self.ui.write_log(f"ERR: EXON bağlantısı kesildi — {e}")
+                self.ui.set_state("ERROR")
+                print("[EXON] 🔄 3 saniyede yeniden bağlanıyor...")
+                await asyncio.sleep(3)
+
+
+def main():
+    ui = ExonUI()
+
+    def runner():
+        ui.wait_for_api_key()
+        exon = ExonLive(ui)
+        try:
+            asyncio.run(exon.run())
+        except KeyboardInterrupt:
+            print("\n🔴 Kapatılıyor...")
+
+    threading.Thread(target=runner, daemon=True).start()
+    ui.root.mainloop()
+
+
+if __name__ == "__main__":
+    main()

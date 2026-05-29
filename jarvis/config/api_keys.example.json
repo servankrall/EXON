@@ -1,0 +1,11 @@
+{
+  "gemini_api_key": "",
+  "voice": "Charon",
+  "youtube_api_key": "",
+  "youtube_channel_handle": "",
+  "hf_api_key": "",
+  "picovoice_access_key": "",
+  "wake_keyword_path": "",
+  "telegram_bot_token": "",
+  "discord_bot_token": ""
+}
