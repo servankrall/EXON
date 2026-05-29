@@ -14,6 +14,7 @@
   "barge_in_threshold": 1100,
   "pro_active": false,
   "license_key": "",
+  "license_secret": "",
   "pro_plan": "",
   "gumroad_product_id": "",
   "gumroad_product_permalink": "",

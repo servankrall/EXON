@@ -5,16 +5,44 @@ sana gelmesi** için Pro'yu nasıl kuracağını anlatır. **Sunucu/backend gere
 
 ---
 
-## 🎯 Mantık
-- Sen bir satış platformunda (**Gumroad** önerilir) "EXON Pro" ürünü açarsın, fiyat koyarsın.
-- Müşteri satın alınca **para senin hesabına** geçer ve müşteriye otomatik bir
-  **lisans anahtarı** verilir.
-- Müşteri uygulamadaki **"✦ PRO'YA GEÇ"** butonundan anahtarı girer; EXON, Gumroad'ın
-  ücretsiz API'siyle anahtarı doğrular ve Pro özellikleri açılır.
+## 🎯 İki yöntem (ikisi de parayı sana getirir)
+- **Yöntem A — Kolay (önerilen):** Anahtarı SEN üretirsin; Gumroad'ın "lisans anahtarı" özelliği **gerekmez**.
+- **Yöntem B — Gelişmiş:** Gumroad üyelik + otomatik lisans doğrulama (abonelik bitince Pro kapanır).
+
+Her iki yöntemde de satış Gumroad/Shopier üzerinden olur ve **para senin hesabına** geçer.
+EXON ödemeye hiç dokunmaz; sadece lisans anahtarını doğrular.
 
 ---
 
-## 1) Gumroad ile (önerilen — abonelik + lisans otomatik)
+## Yöntem A (kolay, önerilen): Kendi anahtarını üret
+> Gumroad'da "Generate a unique license key" seçeneğini bulamadıysan **bunu kullan.**
+
+1. (Opsiyonel) Kendi gizli imzanı koy — koymazsan gömülü varsayılan kullanılır.
+   `jarvis/config/api_keys.json`:
+   ```json
+   "license_secret": "kendi-uzun-gizli-metnin"
+   ```
+2. Gumroad/Shopier'de **normal bir ürün** aç (Aylık $2, Yıllık $10). Lisans özelliği gerekmez.
+3. `jarvis` klasöründe anahtar üret:
+   ```cmd
+   python make_license.py yearly      (yıllık, 365 gün)
+   python make_license.py monthly     (aylık, 30 gün)
+   python make_license.py lifetime    (ömürlük)
+   ```
+4. Çıkan anahtarı (örn. `EXON-Y-20967-FDF073EF35`) satın alan kişiye ver (Gumroad satış
+   sonrası "content/receipt" alanına yaz ya da e-posta at).
+5. Müşteri EXON'da **✦ PRO'YA GEÇ → Etkinleştir**'e anahtarı girer → Pro açılır.
+   Aylık/yıllık anahtarlar sürelidir; süre bitince yeni anahtar verirsin (yenileme).
+
+Butonların senin satış sayfanı açması için (opsiyonel):
+```json
+"pro_purchase_url_monthly": "https://senin.gumroad.com/l/exon-pro",
+"pro_purchase_url_yearly":  "https://senin.gumroad.com/l/exon-pro"
+```
+
+---
+
+## Yöntem B (gelişmiş): Gumroad otomatik abonelik
 1. [gumroad.com](https://gumroad.com) → ücretsiz hesap aç (ödeme için PayPal/banka bağla).
 2. **New Product → Membership** oluştur: ad "EXON Pro". İki **tier (kademe)** ekle:
    - **Aylık** → `$2 / month`
