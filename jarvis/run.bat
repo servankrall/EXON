@@ -1,104 +1,96 @@
 @echo off
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
+title EXON - EXON Robotik
 
-:: Temp/RAR klasor kontrolu
+:: ---- Gecici klasor kontrolu ----
 echo %CD% | findstr /i "Temp" >nul 2>&1
 if %ERRORLEVEL% equ 0 (
-    echo [HATA] Gecici klasorden calistiriliyor - once kalici bir yere cikartin.
-    echo Ornek: C:\EXON\
+    echo [HATA] Gecici klasorden calistiriliyor. Once kalici bir yere cikarin ^(orn. C:\EXON\^).
     pause & exit /b 1
 )
 
 :: ---- Python bul ----
-set PYTHON=
-where python >nul 2>&1
-if %ERRORLEVEL% equ 0 (
-    set PYTHON=python
-) else (
+set "PYTHON="
+where python >nul 2>&1 && set "PYTHON=python"
+if not defined PYTHON ( where py >nul 2>&1 && set "PYTHON=py" )
+if not defined PYTHON (
     for %%P in (
-        "%LOCALAPPDATA%\Programs\Python\Python314\python.exe"
         "%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
         "%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
         "%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
-        "%LOCALAPPDATA%\Programs\Python\Python310\python.exe"
-        "%PROGRAMFILES%\Python314\python.exe"
         "%PROGRAMFILES%\Python313\python.exe"
         "%PROGRAMFILES%\Python312\python.exe"
         "%PROGRAMFILES%\Python311\python.exe"
-    ) do (
-        if exist %%P if not defined PYTHON set PYTHON=%%P
-    )
+    ) do ( if exist %%P if not defined PYTHON set "PYTHON=%%P" )
 )
-
 if not defined PYTHON (
-    echo [HATA] Python bulunamadi. https://www.python.org/downloads/
+    echo.
+    echo [HATA] Python bulunamadi.
+    echo https://www.python.org/downloads/ adresinden Python 3.11+ kurun.
+    echo Kurulum sirasinda "Add Python to PATH" kutucugunu MUTLAKA isaretleyin.
     pause & exit /b 1
 )
 
-echo EXON Windows baslatiliyor...
-echo Python: %PYTHON%
-echo.
+:: ---- Ilk kurulum gerekli mi? ----
+set NEED=0
+if not exist "%~dp0.exon_installed" set NEED=1
+%PYTHON% -c "import google.genai, psutil, PIL, pygame, requests, bs4, pyaudio" >nul 2>&1
+if errorlevel 1 set NEED=1
 
-:: ---- PyAudio kontrol ve otomatik kurulum ----
-%PYTHON% -c "import pyaudio" >nul 2>&1
-if %ERRORLEVEL% neq 0 (
-    echo [BILGI] PyAudio eksik, kuruluyor...
-
-    %PYTHON% -m pip install PyAudio --quiet >nul 2>&1
-    %PYTHON% -c "import pyaudio" >nul 2>&1
-    if !ERRORLEVEL! equ 0 goto :pyaudio_ok
-
-    echo  pip basarisiz, pipwin deneniyor...
-    %PYTHON% -m pip install pipwin --quiet >nul 2>&1
-    %PYTHON% -m pipwin install pyaudio >nul 2>&1
-    %PYTHON% -c "import pyaudio" >nul 2>&1
-    if !ERRORLEVEL! equ 0 goto :pyaudio_ok
-
-    %PYTHON% -m pip install PyAudio --only-binary :all: --quiet >nul 2>&1
-    %PYTHON% -c "import pyaudio" >nul 2>&1
-    if !ERRORLEVEL! equ 0 goto :pyaudio_ok
-
+if "%NEED%"=="1" (
     echo.
-    echo  [UYARI] PyAudio otomatik kurulamadi.
-    echo  Manuel cozum - Yonetici CMD'de su komutu calistirin:
-    echo    pip install pipwin
-    echo    pipwin install pyaudio
+    echo  ================================================
+    echo    EXON ilk kurulum - gerekenler yukleniyor
+    echo    Bu yalnizca BIR KEZ yapilir, birkac dakika surebilir.
+    echo  ================================================
     echo.
-    echo  ENTER ile devam et, CTRL+C ile cik.
-    pause
-    goto :deps_check
+    %PYTHON% -m pip install --upgrade pip
+    %PYTHON% -m pip install -r "%~dp0requirements.txt"
+
+    :: Cekirdek paketler hala eksikse teker teker dene
+    %PYTHON% -c "import google.genai, psutil, PIL, pygame, requests, bs4" >nul 2>&1
+    if errorlevel 1 (
+        for %%M in (google-genai psutil Pillow pygame requests beautifulsoup4 pyttsx3 pyperclip pyautogui pygetwindow pywin32) do (
+            %PYTHON% -m pip install %%M
+        )
+    )
+
+    :: PyAudio (ozel)
+    %PYTHON% -c "import pyaudio" >nul 2>&1
+    if errorlevel 1 (
+        echo  PyAudio kuruluyor...
+        %PYTHON% -m pip install PyAudio
+        %PYTHON% -c "import pyaudio" >nul 2>&1
+        if errorlevel 1 (
+            %PYTHON% -m pip install pipwin
+            %PYTHON% -m pipwin install pyaudio
+        )
+    )
+
+    :: Opsiyonel ozellikler (basarisiz olursa sorun degil)
+    for %%M in (pvporcupine opencv-contrib-python discord.py) do (
+        %PYTHON% -m pip install %%M >nul 2>&1
+    )
+
+    :: Klasorler + ornek ayar dosyasi
+    if not exist "%~dp0config" mkdir "%~dp0config"
+    if not exist "%~dp0memory" mkdir "%~dp0memory"
+    if not exist "%~dp0config\api_keys.json" if exist "%~dp0config\api_keys.example.json" copy "%~dp0config\api_keys.example.json" "%~dp0config\api_keys.json" >nul
+
+    echo done> "%~dp0.exon_installed"
+    echo.
+    echo  Kurulum tamamlandi!
+    echo.
 )
 
-:pyaudio_ok
-echo  PyAudio hazir.
-
-:deps_check
-:: ---- Diger modul kontrolleri ----
-echo Moduller kontrol ediliyor...
-%PYTHON% -c "import google.genai" >nul 2>&1
-if %ERRORLEVEL% neq 0 echo  [UYARI] google-genai eksik: pip install google-genai
-%PYTHON% -c "import psutil" >nul 2>&1
-if %ERRORLEVEL% neq 0 echo  [UYARI] psutil eksik: pip install psutil
-%PYTHON% -c "import PIL" >nul 2>&1
-if %ERRORLEVEL% neq 0 echo  [UYARI] Pillow eksik: pip install Pillow
-%PYTHON% -c "import pygame" >nul 2>&1
-if %ERRORLEVEL% neq 0 echo  [UYARI] pygame eksik: pip install pygame
-%PYTHON% -c "import pyttsx3" >nul 2>&1
-if %ERRORLEVEL% neq 0 echo  [UYARI] pyttsx3 eksik: pip install pyttsx3
-echo Kontrol tamamlandi.
-echo.
-
-:: ---- Baslatma ----
-%PYTHON% main.py
+:: ---- Baslat ----
+echo EXON baslatiliyor...
+%PYTHON% "%~dp0main.py"
 set ERR=%ERRORLEVEL%
 if %ERR% neq 0 (
     echo.
-    echo -----------------------------------------------
-    echo EXON kapandi. Hata kodu: %ERR%
-    echo -----------------------------------------------
-    echo Cozum: setup.bat calistirin veya hata mesajini kontrol edin.
-    echo.
+    echo EXON kapandi ^(hata kodu %ERR%^). Sorun surerse setup.bat calistirin.
     pause
 )
 endlocal

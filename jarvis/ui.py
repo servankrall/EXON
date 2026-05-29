@@ -679,27 +679,26 @@ class ExonUI:
         win.configure(bg=C_BG)
         win.attributes("-topmost", True)
         win.lift()
-        win.geometry("540x600")
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        w, h = 560, 720
+        win.geometry(f"{w}x{h}+{(sw - w) // 2}+{max(0, (sh - h) // 2)}")
+        win.minsize(520, 560)
+        win.resizable(True, True)
 
         tk.Label(win, text="✦ EXON PRO", fg=C_GOLD, bg=C_BG,
-                 font=font_display(26)).pack(pady=(22, 2))
+                 font=font_display(26)).pack(pady=(18, 2))
         if pro:
             lbl = current_plan_label()
             sub = f"Pro aktif{(' · ' + lbl + ' plan') if lbl else ''} — teşekkürler! 🎉"
         else:
             sub = "Tüm güçlü özelliklerin kilidini aç — Aylık $2 / Yıllık $10"
         tk.Label(win, text=sub, fg=(C_GREEN if pro else C_CYAN), bg=C_BG,
-                 font=font_body(13)).pack(pady=(0, 14))
-
-        feats = tk.Frame(win, bg=C_BG)
-        feats.pack(padx=30, anchor="w")
-        for f in PRO_FEATURES_TR:
-            tk.Label(feats, text=f"✓  {f}", fg=C_TEXT, bg=C_BG,
-                     font=font_body(12), anchor="w").pack(anchor="w", pady=1)
+                 font=font_body(12)).pack(pady=(0, 10))
 
         if not pro:
             buy_note = tk.Label(win, text="", fg=C_GOLD, bg=C_BG, font=font_body(10),
-                                wraplength=470, justify="center")
+                                wraplength=480, justify="center")
 
             def _buy(plan):
                 url = get_purchase_url(plan)
@@ -708,44 +707,57 @@ class ExonUI:
                     buy_note.configure(text="Satın alma sayfası tarayıcıda açıldı.")
                 else:
                     buy_note.configure(
-                        text="⚠ Satın alma bağlantısı henüz ayarlanmadı. Geliştirici: "
-                             "config/api_keys.json içine Gumroad linklerini ekle (bkz. PRO_KURULUM.md).")
+                        text="⚠ Satın alma bağlantısı ayarlı değil (config/api_keys.json → PRO_KURULUM.md).")
 
             plans = tk.Frame(win, bg=C_BG)
-            plans.pack(pady=(18, 4))
-            tk.Button(plans, text="Aylık · $2", cursor="hand2",
-                      command=lambda: _buy("monthly"),
+            plans.pack(pady=(6, 4))
+            tk.Button(plans, text="Aylık · $2", cursor="hand2", command=lambda: _buy("monthly"),
                       fg=C_BG, bg=C_CYAN, activebackground=C_ORG2, activeforeground=C_BG,
-                      font=font_body_bold(13), borderwidth=0, padx=22, pady=10).pack(side="left", padx=8)
-            tk.Button(plans, text="Yıllık · $10", cursor="hand2",
-                      command=lambda: _buy("yearly"),
+                      font=font_body_bold(13), borderwidth=0, padx=22, pady=9).pack(side="left", padx=8)
+            tk.Button(plans, text="Yıllık · $10", cursor="hand2", command=lambda: _buy("yearly"),
                       fg=C_BG, bg=C_GOLD, activebackground=C_ORG2, activeforeground=C_BG,
-                      font=font_body_bold(13), borderwidth=0, padx=22, pady=10).pack(side="left", padx=8)
-            tk.Label(win, text="Yıllıkta ~2 ay bedava — en avantajlısı", fg=C_MID, bg=C_BG,
-                     font=font_body(10)).pack(pady=(0, 4))
-            buy_note.pack(pady=(0, 8))
-            tk.Label(win, text="Lisans anahtarın varsa gir:", fg=C_MID, bg=C_BG,
-                     font=font_body(11)).pack()
-            entry = tk.Entry(win, width=44, fg=C_TEXT, bg="#06101f",
-                             insertbackground=C_TEXT, borderwidth=0, font=font_body(12))
-            entry.pack(pady=(4, 8), ipady=5)
-            status = tk.Label(win, text="", fg=C_GOLD, bg=C_BG, font=font_body(11))
-            status.pack()
+                      font=font_body_bold(13), borderwidth=0, padx=22, pady=9).pack(side="left", padx=8)
+            buy_note.pack(pady=(2, 8))
 
-            def _activate():
+            # ── Lisans etkinleştirme kutusu (her zaman görünür, Enter çalışır) ──
+            box = tk.Frame(win, bg="#081426", highlightbackground=C_MID, highlightthickness=1)
+            box.pack(fill="x", padx=24, pady=(2, 10))
+            tk.Label(box, text="Lisans anahtarını yapıştır ve Enter'a bas:",
+                     fg=C_CYAN, bg="#081426", font=font_body_bold(11)).pack(pady=(10, 4))
+            entry = tk.Entry(box, width=40, fg=C_TEXT, bg="#06101f", insertbackground=C_TEXT,
+                             borderwidth=0, font=font_body(13), justify="center")
+            entry.pack(pady=(0, 8), ipady=6, padx=12)
+            status = tk.Label(box, text="", fg=C_GOLD, bg="#081426", font=font_body(11),
+                              wraplength=480, justify="center")
+            status.pack(pady=(0, 4))
+
+            def _activate(event=None):
                 ok, msg = activate_license(entry.get())
                 status.configure(text=msg, fg=(C_GREEN if ok else C_RED))
                 if ok:
                     self._draw_pro_button()
                     self.write_log("SYS: ✦ EXON Pro etkinleştirildi.")
+                    self.root.after(1600, win.destroy)
 
-            tk.Button(win, text="ETKİNLEŞTİR", command=_activate, cursor="hand2",
-                      fg=C_PRI, bg=C_PANEL, activebackground=C_PRI, activeforeground=C_BG,
-                      font=font_body_bold(12), borderwidth=0, padx=22, pady=8).pack(pady=(2, 10))
+            entry.bind("<Return>", _activate)
+            entry.bind("<KP_Enter>", _activate)
+            tk.Button(box, text="✓  ETKİNLEŞTİR", command=_activate, cursor="hand2",
+                      fg=C_BG, bg=C_GREEN, activebackground=C_CYAN, activeforeground=C_BG,
+                      font=font_body_bold(12), borderwidth=0, padx=22, pady=8).pack(pady=(0, 12))
+            entry.focus_set()
+
+        # Pro özellikleri (kompakt liste)
+        feats = tk.Frame(win, bg=C_BG)
+        feats.pack(padx=30, anchor="w", pady=(2, 6))
+        tk.Label(feats, text="Pro ile gelenler:", fg=C_MID, bg=C_BG,
+                 font=font_body_bold(10), anchor="w").pack(anchor="w")
+        for f in PRO_FEATURES_TR:
+            tk.Label(feats, text=f"✓  {f}", fg=C_TEXT, bg=C_BG,
+                     font=font_body(11), anchor="w").pack(anchor="w")
 
         tk.Button(win, text="KAPAT", command=win.destroy, cursor="hand2",
                   fg=C_TEXT, bg=C_PANEL, activebackground=C_MID, activeforeground=C_BG,
-                  font=font_body_bold(11), borderwidth=0, padx=20, pady=6).pack(pady=(8, 16))
+                  font=font_body_bold(11), borderwidth=0, padx=20, pady=6).pack(pady=(6, 14))
 
     # ── Görsel butonları (yükle / oluştur) ───────────────────────────────────
     def _make_bracket_button(self, text: str, color: str, command,

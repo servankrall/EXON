@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# PyInstaller / paketleme artiklari (uygulamaya cevirince olusan gereksiz klasorler)
+build/
+dist/
+*.spec
+
+# EXON kurulum / calisma-zamani isaretleri ve gecici klasorler
+.exon_installed
+.deps_installed
+jarvis/beats/
+jarvis/screenshots/
+jarvis/generated_images/
+
+# Ortam / editor
+venv/
+.venv/
+.vscode/
+.idea/
+.DS_Store

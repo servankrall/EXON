@@ -40,18 +40,27 @@ düşünme, oyun modu...).
 
 ---
 
-## ⚡ Hızlı Kurulum (Windows)
+## ⚡ Kurulum (Windows) — tek tık
 
+**En kolay yol:** `jarvis` klasöründeki **`run.bat`** dosyasına çift tıkla.
+İlk açılışta gerekli her şeyi **otomatik kurar** (Python paketleri) ve uygulamayı başlatır —
+sonraki açılışlarda doğrudan başlar. Tek şart: bilgisayarda **Python 3.11+** kurulu olması
+([python.org](https://www.python.org/downloads/) — kurarken "Add Python to PATH" işaretli).
+
+Geliştirici / manuel kurulum:
 ```cmd
 git clone https://github.com/servankrall/EXON.git
 cd EXON\jarvis
 pip install -r requirements.txt
 python main.py
 ```
-veya `jarvis\setup.bat` → `jarvis\run.bat` çift tıkla.
 
 İlk açılışta **Gemini API anahtarınızı** girin (ekran sizi yönlendirir).
 Anahtarı [Google AI Studio](https://aistudio.google.com/apikey)'dan ücretsiz alabilirsiniz.
+
+> **Dağıtım:** Uygulamayı paylaşmak için `jarvis` klasörünü ZIP'leyip gönderin; kullanıcı
+> açıp `run.bat`'a çift tıklar, gerisi otomatik. PyInstaller'a gerek yok — paketleme
+> artıklarını (`build/`, `dist/`, `*.spec`) **`temizle.bat`** ile silebilirsiniz.
 
 ---
 
