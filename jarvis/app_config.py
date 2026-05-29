@@ -23,6 +23,12 @@ DEFAULT_CONFIG = {
     "wake_keyword_path": "",      # özel .ppn yolu (boşsa wake/Hey-EXON_windows.ppn veya 'jarvis')
     "telegram_bot_token": "",     # Telegram köprüsü (@BotFather)
     "discord_bot_token": "",      # Discord köprüsü (discord.py gerekir)
+    # ── E-posta (Gmail IMAP/SMTP — uygulama şifresi, OAuth gerekmez) ──
+    "gmail_address": "",          # Gmail adresin (e-posta okuma/gönderme için)
+    "gmail_app_password": "",     # Google 'uygulama şifresi' (16 hane; normal şifre değil)
+    # ── Barge-in: EXON konuşurken konuşursan susup seni dinler ──
+    "barge_in": True,             # false yaparsan kapanır
+    "barge_in_threshold": 900,    # ses eşiği; düşürürsen daha hassas, yükseltirsen daha zor tetiklenir
 }
 
 

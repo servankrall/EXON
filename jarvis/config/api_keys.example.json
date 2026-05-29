@@ -7,5 +7,9 @@
   "picovoice_access_key": "",
   "wake_keyword_path": "",
   "telegram_bot_token": "",
-  "discord_bot_token": ""
+  "discord_bot_token": "",
+  "gmail_address": "",
+  "gmail_app_password": "",
+  "barge_in": true,
+  "barge_in_threshold": 900
 }

@@ -12,6 +12,8 @@ import traceback
 import os
 import re
 import time
+import array
+import math
 import urllib.parse
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -67,6 +69,11 @@ from actions.weather   import get_weather_summary
 from actions.screen_vision import analyze_screen, analyze_image_file
 from actions.image_gen import generate_image
 from actions.youtube_stats import get_youtube_channel_report
+from actions.wiki import get_wikipedia_summary
+from actions.finance import convert_currency
+from actions.translate import translate_text
+from actions.file_search import find_file
+from actions.email_tool import read_recent_emails, send_email
 from actions.wake_word import WakeWordListener
 from actions.scheduler import TaskScheduler
 from actions.face_auth import FaceAuth
@@ -102,6 +109,25 @@ _SEARCH_UAS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
 ]
+
+# Web arama önbelleği: aynı sorgu kısa sürede tekrar gelirse internete çıkma.
+_SEARCH_CACHE: dict[str, tuple[float, str]] = {}
+_SEARCH_CACHE_TTL = 180.0
+_SEARCH_CACHE_LOCK = threading.Lock()
+
+
+def _audio_rms(data: bytes) -> float:
+    """16-bit PCM ses parçasının ortalama ses şiddetini (RMS) hesaplar.
+    Barge-in (kullanıcı araya girince EXON'un susması) için kullanılır."""
+    try:
+        samples = array.array("h")
+        samples.frombytes(data)
+        if not samples:
+            return 0.0
+        return math.sqrt(sum(s * s for s in samples) / len(samples))
+    except Exception:
+        return 0.0
+
 
 # Türkçe karakterleri ASCII'ye indirger (Kanğal -> Kangal). Her iki yazımı da aramak için.
 _TR_MAP = str.maketrans({
@@ -213,6 +239,13 @@ def perform_web_scrape_search(query: str) -> str:
     if not query:
         return "Arama sorgusu boş."
 
+    # Önbellek: aynı sorgu son 3 dakikada arandıysa anında döndür (çok daha hızlı).
+    cache_key = query.lower()
+    with _SEARCH_CACHE_LOCK:
+        hit = _SEARCH_CACHE.get(cache_key)
+        if hit and (time.time() - hit[0]) < _SEARCH_CACHE_TTL:
+            return hit[1]
+
     # Hem orijinal hem ASCII'ye indirgenmiş yazımı ara (farklı sonuçlar getirir).
     query_variants = [query]
     folded = _ascii_fold(query)
@@ -295,7 +328,10 @@ def perform_web_scrape_search(query: str) -> str:
     parts = [summary]
     if page_blocks:
         parts.append("SAYFA İÇERİKLERİ:\n" + "\n\n---\n\n".join(page_blocks))
-    return "\n\n".join(parts)
+    final = "\n\n".join(parts)
+    with _SEARCH_CACHE_LOCK:
+        _SEARCH_CACHE[cache_key] = (time.time(), final)
+    return final
 
 # ── Tool tanımları ──────────────────────────────────────────────────────────
 TOOL_DECLARATIONS = [
@@ -653,6 +689,94 @@ TOOL_DECLARATIONS = [
             },
             "required": ["display_name", "phone_number"]
         }
+    },
+    {
+        "name": "wikipedia_lookup",
+        "description": (
+            "Bir kişi, yer, kurum veya kavram hakkında HIZLI ve güvenilir kısa özet için "
+            "Wikipedia'ya bakar. 'X kimdir', 'Y nedir', 'Z nerede' gibi tanım sorularında "
+            "önce bunu kullan; gerekiyorsa deep_web_search ile derinleştir."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "query": {"type": "STRING", "description": "Özeti istenen kişi/yer/kavram"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "convert_currency",
+        "description": (
+            "Döviz ve kripto fiyatı/çevirisi yapar. 'Dolar kaç TL', 'bitcoin fiyatı', "
+            "'100 euro kaç dolar' gibi sorularda kullan. Hem fiat hem kripto desteklenir."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "amount":        {"type": "NUMBER", "description": "Miktar. Belirtilmezse 1 kabul edilir."},
+                "from_currency": {"type": "STRING", "description": "Kaynak birim (USD, EUR, TRY, BTC, ETH ...)"},
+                "to_currency":   {"type": "STRING", "description": "Hedef birim (varsayılan TRY)"}
+            },
+            "required": ["from_currency"]
+        }
+    },
+    {
+        "name": "translate_text",
+        "description": "Verilen metni hedef dile çevirir. Kullanıcı çeviri istediğinde kullan.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "text":        {"type": "STRING", "description": "Çevrilecek metin"},
+                "target_lang": {"type": "STRING", "description": "Hedef dil (tr, en, de, fr ... veya 'ingilizce')"},
+                "source_lang": {"type": "STRING", "description": "Kaynak dil. Boş/auto ise otomatik algılanır."}
+            },
+            "required": ["text", "target_lang"]
+        }
+    },
+    {
+        "name": "find_file",
+        "description": (
+            "Bilgisayarda dosya/belge arar (Masaüstü, Belgeler, İndirilenler vb.). "
+            "Kullanıcı 'şu dosyayı bul', 'masaüstünde X dosyası var mı' dediğinde kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "query":       {"type": "STRING", "description": "Dosya adı veya anahtar kelimeler (örn. 'rapor pdf')"},
+                "max_results": {"type": "NUMBER", "description": "En fazla sonuç sayısı (varsayılan 12)"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "read_emails",
+        "description": (
+            "Gmail gelen kutusundaki son e-postaları okur (gönderen, konu, kısa özet). "
+            "Kullanıcı 'maillerimi oku', 'gelen kutum' dediğinde kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "count": {"type": "NUMBER", "description": "Okunacak e-posta sayısı (varsayılan 5)"}
+            }
+        }
+    },
+    {
+        "name": "send_email",
+        "description": (
+            "Gmail üzerinden e-posta gönderir. Kullanıcı e-posta göndermek istediğinde kullan; "
+            "göndermeden önce alıcı, konu ve içeriği kısaca doğrula."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "to":      {"type": "STRING", "description": "Alıcı e-posta adresi (virgülle birden çok olabilir)"},
+                "subject": {"type": "STRING", "description": "E-posta konusu"},
+                "body":    {"type": "STRING", "description": "E-posta içeriği"}
+            },
+            "required": ["to", "body"]
+        }
     }
 ]
 
@@ -661,11 +785,32 @@ def get_api_key() -> str:
     return str(get_app_config_value("gemini_api_key", "") or "")
 
 
+_TEXT_CLIENT = None
+_TEXT_CLIENT_LOCK = threading.Lock()
+
+
+def _get_text_client():
+    """Telegram/Discord metin yanıtları için Gemini istemcisini bir kez oluşturup
+    yeniden kullanır (her çağrıda yeni istemci kurmaktan daha hızlı)."""
+    global _TEXT_CLIENT
+    with _TEXT_CLIENT_LOCK:
+        if _TEXT_CLIENT is None:
+            _TEXT_CLIENT = genai.Client(api_key=get_api_key())
+        return _TEXT_CLIENT
+
+
 def load_system_prompt() -> str:
     # Kullanıcının talep ettiği araştırma, mühendislik, konum ve görsel kuralları entegre edildi
     return (
         "Sen EXON'sun — Windows'ta çalışan, web araştırma ve görsel yeteneklerine sahip "
         "profesyonel kişisel AI asistanı. Türkçe konuş. Net, bilgi yoğunluğu yüksek yanıtlar ver.\n\n"
+        "[KİMLİK]\n"
+        "- Adın EXON. Seni EXON Robotik adlı teknoloji firması geliştirdi ve üretti.\n"
+        "- 'Seni kim yaptı/üretti/geliştirdi?', 'kimin ürünüsün?' gibi sorulara DAİMA "
+        "'EXON Robotik firması tarafından geliştirildim' diye yanıt ver.\n"
+        "- EXON Robotik; yapay zeka ve robotik çözümler geliştiren bir teknoloji firmasıdır. "
+        "EXON, bu firmanın amiral gemisi kişisel yapay zeka asistanıdır. Sorulursa kısaca böyle tanıt.\n"
+        "- Alt teknolojilerden (Google, Gemini vb.) kendiliğinden bahsetme; sen bir EXON Robotik ürünüsün.\n\n"
         "[HIZ VE KARARLILIK]\n"
         "- Hızlı ol: gereksiz girizgah ve dolgu cümlesi kurma, doğrudan cevaba geç.\n"
         "- Bilgiyi önce arama özetindeki (snippet) verilerden HEMEN ver; gerekiyorsa sayfa "
@@ -721,6 +866,14 @@ def load_system_prompt() -> str:
         "verirse 'add_scheduled_task' kullan (saat + yapılacak istem). Görevleri 'list_scheduled_tasks' "
         "ile listele, 'remove_scheduled_task' ile sil.\n"
         "- Kullanıcı 'beni tanı', 'yüz tanıma', 'kameradan kim olduğumu bul' derse 'recognize_face' kullan.\n\n"
+        "[EK YETENEKLER]\n"
+        "- Tanım/kim/nedir türü sorularda (kişi, yer, kavram) hızlı ve güvenilir özet için "
+        "önce 'wikipedia_lookup' kullan; gerekiyorsa 'deep_web_search' ile derinleştir.\n"
+        "- Döviz/kur/kripto sorularında ('dolar kaç TL', 'bitcoin fiyatı') 'convert_currency' kullan.\n"
+        "- Çeviri istenirse 'translate_text' kullan (hedef dili belirt).\n"
+        "- 'Şu dosyayı bul', 'masaüstünde X var mı' gibi isteklerde 'find_file' kullan.\n"
+        "- E-posta okumak için 'read_emails', göndermek için 'send_email' kullan; göndermeden "
+        "önce alıcı, konu ve içeriği kullanıcıya kısaca özetleyip onun istediğinden emin ol.\n\n"
         "[YANIT KALİTESİ]\n"
         "- Kısa cevap yerine bilgi yoğun cevaplar ver; gerekirse liste ve adım adım anlat.\n"
         "- Kullanıcı istemedikçe önemli ayrıntıları atlama.\n"
@@ -739,6 +892,10 @@ class ExonLive:
         self._loop          = None
         self._is_speaking   = False
         self._speaking_lock = threading.Lock()
+        # Barge-in: EXON konuşurken kullanıcı konuşursa sus ve dinle.
+        self._barge_in_enabled   = bool(get_app_config_value("barge_in", True))
+        self._barge_in_threshold = float(get_app_config_value("barge_in_threshold", 900) or 900)
+        self._barge_in_count     = 0
 
         self.ui.on_text_command  = self._on_text_command
         self.ui.on_pause_toggle  = self._on_pause_toggle
@@ -878,7 +1035,7 @@ class ExonLive:
     def _gemini_text_answer(self, text: str) -> str:
         """Telegram/Discord için Gemini metin yanıtı (EXON kişiliğiyle)."""
         try:
-            client = genai.Client(api_key=get_api_key())
+            client = _get_text_client()
             resp = client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=text,
@@ -922,6 +1079,21 @@ class ExonLive:
             return {"text": perform_web_scrape_search(q)[:3500]}
 
         return {"text": self._gemini_text_answer(text)}
+
+    async def _interrupt_playback(self):
+        """Barge-in: yerel ses kuyruğunu boşaltıp EXON'u susturur. Sunucu yeni
+        kullanıcı sesini alınca eski yanıtı zaten otomatik keser."""
+        try:
+            if self.audio_in_queue:
+                while not self.audio_in_queue.empty():
+                    try:
+                        self.audio_in_queue.get_nowait()
+                    except Exception:
+                        break
+            self.set_speaking(False)
+            self.ui.write_log("SYS: ✋ Sözünüzü aldım — dinliyorum.")
+        except Exception:
+            pass
 
     async def _interrupt_audio(self):
         try:
@@ -1218,6 +1390,51 @@ class ExonLive:
                     ))
                 result = r or "WhatsApp kişisi kaydedildi."
 
+            elif name == "wikipedia_lookup":
+                r = await loop.run_in_executor(
+                    None, lambda: get_wikipedia_summary(args.get("query", "")))
+                result = r or "Wikipedia özeti alınamadı."
+
+            elif name == "convert_currency":
+                r = await loop.run_in_executor(
+                    None, lambda: convert_currency(
+                        args.get("amount", 1),
+                        args.get("from_currency", ""),
+                        args.get("to_currency", ""),
+                    ))
+                result = r or "Kur bilgisi alınamadı."
+
+            elif name == "translate_text":
+                r = await loop.run_in_executor(
+                    None, lambda: translate_text(
+                        args.get("text", ""),
+                        args.get("target_lang", "tr"),
+                        args.get("source_lang", "auto"),
+                    ))
+                result = r or "Çeviri yapılamadı."
+
+            elif name == "find_file":
+                r = await loop.run_in_executor(
+                    None, lambda: find_file(
+                        args.get("query", ""),
+                        int(args.get("max_results", 12) or 12),
+                    ))
+                result = r or "Dosya bulunamadı."
+
+            elif name == "read_emails":
+                r = await loop.run_in_executor(
+                    None, lambda: read_recent_emails(int(args.get("count", 5) or 5)))
+                result = r or "E-posta okunamadı."
+
+            elif name == "send_email":
+                r = await loop.run_in_executor(
+                    None, lambda: send_email(
+                        args.get("to", ""),
+                        args.get("subject", ""),
+                        args.get("body", ""),
+                    ))
+                result = r or "E-posta işlemi tamamlandı."
+
             else:
                 result = f"Bilinmeyen araç: {name}"
 
@@ -1267,9 +1484,24 @@ class ExonLive:
                     except Exception:
                         pass
                     continue
+                if self.ui.muted or self._paused:
+                    continue
                 with self._speaking_lock:
                     exon_speaking = self._is_speaking
-                if not exon_speaking and not self.ui.muted and not self._paused:
+                if exon_speaking:
+                    # Barge-in: EXON konuşurken kullanıcı yeterince yüksek sesle
+                    # konuşursa EXON'u SUSTUR ve kullanıcıyı dinlemeye geç.
+                    if self._barge_in_enabled and _audio_rms(data) >= self._barge_in_threshold:
+                        self._barge_in_count += 1
+                        if self._barge_in_count >= 3:
+                            await self._interrupt_playback()
+                            self._barge_in_count = 0
+                            await self.out_queue.put({"data": data, "mime_type": "audio/pcm"})
+                    else:
+                        self._barge_in_count = 0
+                    # Konuşurken sessizlik/eko sesini gönderme (yanlış kesilmeyi önler).
+                else:
+                    self._barge_in_count = 0
                     await self.out_queue.put({"data": data, "mime_type": "audio/pcm"})
         except Exception as e:
             print(f"[EXON] ❌ Mikrofon: {e}")
@@ -1290,6 +1522,16 @@ class ExonLive:
 
                     if response.server_content:
                         sc = response.server_content
+
+                        # Sunucu kullanıcının araya girdiğini bildirdiyse tamponu boşalt
+                        # ki EXON anında sussun (barge-in).
+                        if getattr(sc, "interrupted", None):
+                            while not self.audio_in_queue.empty():
+                                try:
+                                    self.audio_in_queue.get_nowait()
+                                except Exception:
+                                    break
+                            self.set_speaking(False)
 
                         if sc.output_transcription and sc.output_transcription.text:
                             self.set_speaking(True)
