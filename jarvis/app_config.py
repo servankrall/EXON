@@ -29,6 +29,12 @@ DEFAULT_CONFIG = {
     # ── Barge-in: EXON konuşurken konuşursan susup seni dinler ──
     "barge_in": True,             # false yaparsan kapanır
     "barge_in_threshold": 1100,   # ses eşiği; düşürürsen daha hassas, yükseltirsen daha zor tetiklenir
+    # ── EXON Pro (ücretli katman — Gumroad lisans doğrulama, backend gerekmez) ──
+    "pro_active": False,                 # true: tüm Pro özellikleri açık (kendi makinen için)
+    "license_key": "",                   # müşterinin girdiği lisans anahtarı
+    "gumroad_product_id": "",            # Gumroad ürün ID'si (lisans doğrulama için)
+    "gumroad_product_permalink": "",     # alternatif: Gumroad permalink (örn. 'exon-pro')
+    "pro_purchase_url": "",              # Pro satın alma linkin (senin Gumroad/Shopier ürünün)
 }
 
 

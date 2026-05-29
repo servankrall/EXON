@@ -25,6 +25,7 @@ from PIL import Image, ImageTk
 
 from app_config import has_gemini_api_key, load_app_config, save_app_config
 from actions.weather import get_weather_summary, get_auto_location_city
+from actions.license_manager import is_pro, activate_license, get_purchase_url, PRO_FEATURES_TR
 
 # pygame ses sistemi
 try:
@@ -474,6 +475,7 @@ class ExonUI:
         self._build_pause_button()
         self._build_image_buttons()
         self._build_shutdown_button()
+        self._build_pro_button()
         self._build_settings_panel()
         self._build_voice_selector(self._settings_body)
         self._build_sfx_button(self._settings_body)
@@ -643,6 +645,82 @@ class ExonUI:
         c.create_text(BW//2, BH//2, text="⏻  SHUTDOWN",
                       fill=C_RED, font=font_display(11))
 
+    # ── EXON Pro butonu + satın alma/etkinleştirme ───────────────────────────
+    def _build_pro_button(self):
+        self._pro_canvas = tk.Canvas(self.root, width=196, height=34,
+                                     bg=C_BG, highlightthickness=0, cursor="hand2")
+        self._pro_canvas.bind("<Button-1>", lambda e: self._open_pro_dialog())
+        self._draw_pro_button()
+
+    def _draw_pro_button(self):
+        c = self._pro_canvas
+        bw = int(c["width"]); bh = int(c["height"])
+        c.delete("all")
+        try:
+            pro = is_pro()
+        except Exception:
+            pro = False
+        col   = C_GOLD if pro else C_CYAN
+        label = "✦ EXON PRO" if pro else "✦ PRO'YA GEÇ"
+        bl = 7
+        for bx, by, sx, sy in [(0, 0, 1, 1), (bw, 0, -1, 1), (0, bh, 1, -1), (bw, bh, -1, -1)]:
+            c.create_line(bx, by, bx+sx*bl, by, fill=col, width=2)
+            c.create_line(bx, by, bx, by+sy*bl, fill=col, width=2)
+        c.create_text(bw//2, bh//2, text=label, fill=col, font=font_display(12))
+
+    def _open_pro_dialog(self):
+        try:
+            pro = is_pro()
+        except Exception:
+            pro = False
+        win = tk.Toplevel(self.root)
+        win.title("EXON PRO")
+        win.configure(bg=C_BG)
+        win.attributes("-topmost", True)
+        win.lift()
+        win.geometry("540x600")
+
+        tk.Label(win, text="✦ EXON PRO", fg=C_GOLD, bg=C_BG,
+                 font=font_display(26)).pack(pady=(22, 2))
+        sub = ("Pro aktif — teşekkürler! 🎉" if pro
+               else "Tüm güçlü özelliklerin kilidini aç")
+        tk.Label(win, text=sub, fg=(C_GREEN if pro else C_CYAN), bg=C_BG,
+                 font=font_body(13)).pack(pady=(0, 14))
+
+        feats = tk.Frame(win, bg=C_BG)
+        feats.pack(padx=30, anchor="w")
+        for f in PRO_FEATURES_TR:
+            tk.Label(feats, text=f"✓  {f}", fg=C_TEXT, bg=C_BG,
+                     font=font_body(12), anchor="w").pack(anchor="w", pady=1)
+
+        if not pro:
+            tk.Button(win, text="💳  SATIN AL", cursor="hand2",
+                      command=lambda: webbrowser.open(get_purchase_url()),
+                      fg=C_BG, bg=C_GOLD, activebackground=C_ORG2, activeforeground=C_BG,
+                      font=font_body_bold(13), borderwidth=0, padx=26, pady=10).pack(pady=(20, 12))
+            tk.Label(win, text="Lisans anahtarın varsa gir:", fg=C_MID, bg=C_BG,
+                     font=font_body(11)).pack()
+            entry = tk.Entry(win, width=44, fg=C_TEXT, bg="#06101f",
+                             insertbackground=C_TEXT, borderwidth=0, font=font_body(12))
+            entry.pack(pady=(4, 8), ipady=5)
+            status = tk.Label(win, text="", fg=C_GOLD, bg=C_BG, font=font_body(11))
+            status.pack()
+
+            def _activate():
+                ok, msg = activate_license(entry.get())
+                status.configure(text=msg, fg=(C_GREEN if ok else C_RED))
+                if ok:
+                    self._draw_pro_button()
+                    self.write_log("SYS: ✦ EXON Pro etkinleştirildi.")
+
+            tk.Button(win, text="ETKİNLEŞTİR", command=_activate, cursor="hand2",
+                      fg=C_PRI, bg=C_PANEL, activebackground=C_PRI, activeforeground=C_BG,
+                      font=font_body_bold(12), borderwidth=0, padx=22, pady=8).pack(pady=(2, 10))
+
+        tk.Button(win, text="KAPAT", command=win.destroy, cursor="hand2",
+                  fg=C_TEXT, bg=C_PANEL, activebackground=C_MID, activeforeground=C_BG,
+                  font=font_body_bold(11), borderwidth=0, padx=20, pady=6).pack(pady=(8, 16))
+
     # ── Görsel butonları (yükle / oluştur) ───────────────────────────────────
     def _make_bracket_button(self, text: str, color: str, command,
                              width: int = 150, height: int = 36):
@@ -680,6 +758,9 @@ class ExonUI:
             self.write_log("SYS: Görsel analizi için EXON bağlantısı bekleniyor.")
 
     def _on_generate_image_click(self):
+        if not is_pro():
+            self._open_pro_dialog()
+            return
         prompt = simpledialog.askstring(
             "EXON · Görsel Oluştur",
             "Nasıl bir görsel oluşturayım? (İngilizce açıklama daha iyi sonuç verir)",
@@ -1192,6 +1273,9 @@ class ExonUI:
                                 width=inp_w, height=INPUT_H)
         self._send_btn.place(x=self.CHAT_X + inp_w + 8, y=self.CHAT_INPUT_Y,
                              width=76, height=INPUT_H)
+
+        if hasattr(self, "_pro_canvas"):
+            self._pro_canvas.place(x=geo["btn_x"] + geo["btn_w"] + 10, y=geo["btn_y"] + 6)
 
     def _on_input_submit(self, event=None):
         text = self._input_var.get().strip()

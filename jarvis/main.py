@@ -83,6 +83,7 @@ from actions.news import get_news_briefing
 from actions.stocks import get_stock_price
 from actions.code_assistant import (read_code_file, list_code_files,
                                     search_in_code, write_code_file)
+from actions.license_manager import is_pro as _is_pro, PRO_TOOLS
 from actions.wake_word import WakeWordListener
 from actions.scheduler import TaskScheduler
 from actions.face_auth import FaceAuth
@@ -1000,6 +1001,8 @@ def load_system_prompt() -> str:
         "kalıcı bilgi → save_memory.\n"
         "ŞARKI: Kullanıcı şarkı isterse compose_song ile (tür/dil/ruh hali) söz üret; arkada ritim otomatik çalar. "
         "Sözleri DÜZ OKUMA — melodiyle ve ruh haline göre tonla söyle (mutlu=canlı, hüzünlü=içten, rap=ritmik).\n"
+        "Bazı özellikler (görsel, şarkı, kod, e-posta, borsa, haber, oyun modu, ekran analizi) EXON Pro'ya "
+        "özeldir; bir araç 'Pro' mesajı döndürürse kullanıcıya kibarca ilet ve yükseltmeyi öner.\n"
         "Emin olmadığını kesin gibi sunma; bilmiyorsan araştır. Gereksiz ayrıntıyı atlama, net ol."
     )
 
@@ -1328,6 +1331,12 @@ class ExonLive:
         name = fc.name
         args = dict(fc.args or {})
         print(f"[EXON] 🔧 {name} {args}")
+        # EXON Pro kapısı: Free kullanıcı Pro'ya özel bir araç çağırırsa yükseltme öner.
+        if name in PRO_TOOLS and not _is_pro():
+            msg = ("Bu özellik EXON Pro'ya özel. Sağ üstteki '✦ PRO'YA GEÇ' butonundan "
+                   "ya da satın alma bağlantısından yükseltebilirsin. Yükseltmek ister misin?")
+            print(f"[EXON] 🔒 PRO gerekli: {name}")
+            return types.FunctionResponse(id=fc.id, name=name, response={"result": msg})
         self.ui.set_state("THINKING")
 
         loop   = asyncio.get_event_loop()

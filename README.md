@@ -73,6 +73,20 @@ Ayrıntılı ileri özellik kurulumu: [`jarvis/ILERI_OZELLIKLER.md`](jarvis/ILER
 
 ---
 
+## 💎 EXON Pro
+
+EXON **freemium**'dur: sesli sohbet, web & Wikipedia araması, hava durumu, uygulama açma,
+takvim/hatırlatıcı, çeviri, döviz, medya ve WhatsApp **ücretsizdir**.
+
+**Pro** (ücretli) ek olarak şunları açar: görsel oluşturma · şarkı söyleme · kod asistanı ·
+borsa/hisse · haber brifingi · e-posta · oyun modu · ekran analizi · YouTube analizi.
+
+Uygulamadaki **✦ PRO'YA GEÇ** butonundan satın alınır; lisans anahtarı **Gumroad** ile
+otomatik doğrulanır. Satıştan gelen gelir doğrudan satıcının hesabına geçer.
+Kurulum (ürün açma, ödeme alma): [`jarvis/PRO_KURULUM.md`](jarvis/PRO_KURULUM.md)
+
+---
+
 ## 🎙️ Örnek Komutlar
 
 - *"Bitcoin kaç dolar? Bir de Aselsan hissesi ne durumda?"*

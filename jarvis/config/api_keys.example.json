@@ -11,5 +11,10 @@
   "gmail_address": "",
   "gmail_app_password": "",
   "barge_in": true,
-  "barge_in_threshold": 1100
+  "barge_in_threshold": 1100,
+  "pro_active": false,
+  "license_key": "",
+  "gumroad_product_id": "",
+  "gumroad_product_permalink": "",
+  "pro_purchase_url": ""
 }
