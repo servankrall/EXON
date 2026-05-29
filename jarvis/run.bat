@@ -84,6 +84,19 @@ if "%NEED%"=="1" (
     echo.
 )
 
+:: ---- tkinter kontrolu (pip ile KURULAMAZ) ----
+%PYTHON% -c "import tkinter" >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo  [HATA] tkinter eksik - Python'a tcl/tk eklenmemis.
+    echo  Bu pip ile kurulamaz. Cozum:
+    echo    Ayarlar ^> Uygulamalar ^> Python 3.x ^> Degistir/Modify ^>
+    echo    'tcl/tk and IDLE' kutusunu ISARETLE ^> Modify
+    echo    ^(veya python.org'dan tekrar kurarken bu kutuyu isaretle^)
+    echo.
+    pause
+)
+
 :: ---- Baslat ----
 echo EXON baslatiliyor...
 %PYTHON% "%~dp0main.py"

@@ -55,6 +55,27 @@ from google import genai  # type: ignore[reportMissingImports]
 from google.genai import types  # type: ignore[reportMissingImports]
 
 from app_config import get_app_config_value
+
+# tkinter (arayüz) kontrolü — pip ile KURULMAZ; Python kurulumunun parçasıdır.
+try:
+    import tkinter  # noqa: F401
+except ModuleNotFoundError:
+    print("\n" + "=" * 64)
+    print("  HATA: 'tkinter' bulunamadi (Python'a tcl/tk eklenmemis).")
+    print("  tkinter pip ile KURULMAZ; Python kurulumuyla birlikte gelir.")
+    print("")
+    print("  COZUM (Windows):")
+    print("   1) Ayarlar > Uygulamalar > Yuklu uygulamalar > 'Python 3.x'")
+    print("   2) ... (uc nokta) > Degistir / Modify")
+    print("   3) 'tcl/tk and IDLE' kutusunu ISARETLE > Modify")
+    print("   (veya python.org'dan tekrar kur; kurulumda ayni kutuyu isaretle)")
+    print("=" * 64 + "\n")
+    try:
+        input("  Cikmak icin ENTER'a bas...")
+    except Exception:
+        pass
+    raise SystemExit(1)
+
 from ui import ExonUI
 from memory.memory_manager import load_memory, update_memory, delete_memory, format_memory_for_prompt
 from actions.open_app import open_app

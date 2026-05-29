@@ -171,13 +171,24 @@ if exist "%~dp0Fonts\Grift-Regular.ttf" (
 :: ---- Son kontrol ----
 echo.
 echo [7/7] Kurulum ozeti:
-for %%M in (pyaudio google.genai psutil PIL pygame pyttsx3 pyperclip pyautogui win32gui) do (
+for %%M in (tkinter pyaudio google.genai psutil PIL pygame pyttsx3 pyperclip pyautogui win32gui) do (
     %PYTHON% -c "import %%M" >nul 2>&1
     if !ERRORLEVEL! equ 0 (
         echo   [OK] %%M
     ) else (
         echo   [--] %%M ^(eksik^)
     )
+)
+
+:: tkinter (pip ile KURULAMAZ) kontrolu
+%PYTHON% -c "import tkinter" >nul 2>&1
+if !ERRORLEVEL! neq 0 (
+    echo.
+    echo  [ONEMLI UYARI] tkinter eksik - EXON arayuzu ACILMAZ!
+    echo  tkinter pip ile kurulamaz. Python'u onar:
+    echo    Ayarlar ^> Uygulamalar ^> Python 3.x ^> Degistir/Modify ^>
+    echo    'tcl/tk and IDLE' kutusunu ISARETLE ^> Modify
+    echo  veya python.org'dan tekrar kurarken bu kutuyu isaretle.
 )
 
 echo.
