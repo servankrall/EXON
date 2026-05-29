@@ -34,6 +34,14 @@ sana gelmesi** için Pro'yu nasıl kuracağını anlatır. **Sunucu/backend gere
 > Abonelik **iptal edilir veya ödeme alınmazsa** EXON bir sonraki açılışta lisansı
 > yeniden doğrular ve Pro'yu otomatik kapatır.
 
+> **İki ayrı alan var, karıştırma:**
+> - `gumroad_product_id` / `gumroad_product_permalink` → lisans **doğrulama** için.
+> - `pro_purchase_url_monthly` / `pro_purchase_url_yearly` → **butonun açtığı satış sayfası**.
+>
+> `pro_purchase_url_*` boş olsa bile **permalink** doluysa butonlar otomatik
+> `https://gumroad.com/l/<permalink>` ürün sayfanı açar (alıcı orada Aylık/Yıllık seçer).
+> Tier'a **doğrudan** gitmek istersen `pro_purchase_url_monthly/yearly` alanlarını doldur.
+
 Artık "SATIN AL" butonu senin satış sayfanı açar, para sana gelir, anahtar doğrulanır. ✅
 
 ---

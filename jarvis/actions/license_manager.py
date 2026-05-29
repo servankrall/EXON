@@ -60,8 +60,9 @@ def _gumroad_configured() -> bool:
 
 
 def get_purchase_url(plan: str = "") -> str:
-    """İlgili planın satın alma linkini döndürür. Ayarlı değilse BOŞ döner
-    (UI boş linkte tarayıcı açmaz, uyarı gösterir)."""
+    """İlgili planın satın alma linkini döndürür.
+    Öncelik: plana özel link > genel link > Gumroad permalink'ten kurulan ürün linki.
+    Hiçbiri yoksa BOŞ döner (UI uyarı gösterir, boş sayfaya atmaz)."""
     plan = (plan or "").lower()
     url = ""
     if plan == "monthly":
@@ -71,7 +72,14 @@ def get_purchase_url(plan: str = "") -> str:
     url = str(url or "").strip()
     if url:
         return url
-    return str(get_app_config_value("pro_purchase_url", "") or "").strip()
+    general = str(get_app_config_value("pro_purchase_url", "") or "").strip()
+    if general:
+        return general
+    # Yedek: yalnızca Gumroad permalink ayarlıysa ürün sayfasını ondan kur.
+    permalink = str(get_app_config_value("gumroad_product_permalink", "") or "").strip()
+    if permalink:
+        return f"https://gumroad.com/l/{permalink}"
+    return ""
 
 
 def _verify_gumroad(key: str):
