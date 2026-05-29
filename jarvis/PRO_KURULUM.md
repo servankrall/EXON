@@ -14,19 +14,25 @@ sana gelmesi** için Pro'yu nasıl kuracağını anlatır. **Sunucu/backend gere
 
 ---
 
-## 1) Gumroad ile (önerilen — lisans otomatik)
+## 1) Gumroad ile (önerilen — abonelik + lisans otomatik)
 1. [gumroad.com](https://gumroad.com) → ücretsiz hesap aç (ödeme için PayPal/banka bağla).
-2. **New Product → Digital product** oluştur: ad "EXON Pro", fiyat (örn. ₺149 / $4.99).
+2. **New Product → Membership** oluştur: ad "EXON Pro". İki **tier (kademe)** ekle:
+   - **Aylık** → `$2 / month`
+   - **Yıllık** → `$10 / year`
 3. Ürün ayarlarında **"Generate a unique license key per sale"** seçeneğini **AÇ**.
-4. Ürünü yayınla. Sana iki şey lazım:
-   - **Ürün linki** (örn. `https://senin.gumroad.com/l/exon-pro`)
-   - **Product ID** (ürün sayfası → Share/Advanced'de görünür) veya **permalink** (`exon-pro`)
+4. Ürünü yayınla. Sana lazım olanlar:
+   - **Product ID** (ürün → Share/Advanced) veya **permalink** (`exon-pro`)
+   - Her tier'ın **satın alma linki** (tier seçili ürün linki)
 5. `jarvis/config/api_keys.json` dosyasına ekle:
    ```json
-   "pro_purchase_url": "https://senin.gumroad.com/l/exon-pro",
-   "gumroad_product_id": "BURAYA_URUN_ID"
+   "gumroad_product_id": "BURAYA_URUN_ID",
+   "pro_purchase_url_monthly": "https://senin.gumroad.com/l/exon-pro?tier=Ayl%C4%B1k",
+   "pro_purchase_url_yearly":  "https://senin.gumroad.com/l/exon-pro?tier=Y%C4%B1ll%C4%B1k"
    ```
    (ID yerine permalink kullanacaksan: `"gumroad_product_permalink": "exon-pro"`)
+
+> Abonelik **iptal edilir veya ödeme alınmazsa** EXON bir sonraki açılışta lisansı
+> yeniden doğrular ve Pro'yu otomatik kapatır.
 
 Artık "SATIN AL" butonu senin satış sayfanı açar, para sana gelir, anahtar doğrulanır. ✅
 

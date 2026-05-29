@@ -79,10 +79,14 @@ EXON **freemium**'dur: sesli sohbet, web & Wikipedia araması, hava durumu, uygu
 takvim/hatırlatıcı, çeviri, döviz, medya ve WhatsApp **ücretsizdir**.
 
 **Pro** (ücretli) ek olarak şunları açar: görsel oluşturma · şarkı söyleme · kod asistanı ·
-borsa/hisse · haber brifingi · e-posta · oyun modu · ekran analizi · YouTube analizi.
+metin yazarlığı · web/doküman özetleme · borsa/hisse · haber brifingi · e-posta ·
+oyun modu · ekran analizi · YouTube analizi.
+
+**Fiyatlar:** Aylık **$2** · Yıllık **$10** (≈2 ay bedava).
 
 Uygulamadaki **✦ PRO'YA GEÇ** butonundan satın alınır; lisans anahtarı **Gumroad** ile
-otomatik doğrulanır. Satıştan gelen gelir doğrudan satıcının hesabına geçer.
+otomatik doğrulanır ve abonelik bitince Pro otomatik kapanır. Satıştan gelen gelir
+doğrudan satıcının hesabına geçer.
 Kurulum (ürün açma, ödeme alma): [`jarvis/PRO_KURULUM.md`](jarvis/PRO_KURULUM.md)
 
 ---

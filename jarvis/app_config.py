@@ -32,9 +32,12 @@ DEFAULT_CONFIG = {
     # ── EXON Pro (ücretli katman — Gumroad lisans doğrulama, backend gerekmez) ──
     "pro_active": False,                 # true: tüm Pro özellikleri açık (kendi makinen için)
     "license_key": "",                   # müşterinin girdiği lisans anahtarı
+    "pro_plan": "",                       # 'monthly' | 'yearly' (Gumroad doğrulamasından gelir)
     "gumroad_product_id": "",            # Gumroad ürün ID'si (lisans doğrulama için)
     "gumroad_product_permalink": "",     # alternatif: Gumroad permalink (örn. 'exon-pro')
-    "pro_purchase_url": "",              # Pro satın alma linkin (senin Gumroad/Shopier ürünün)
+    "pro_purchase_url": "",              # genel satın alma linki (yedek)
+    "pro_purchase_url_monthly": "",      # Aylık ($2/ay) satın alma linki
+    "pro_purchase_url_yearly": "",       # Yıllık ($10/yıl) satın alma linki
 }
 
 

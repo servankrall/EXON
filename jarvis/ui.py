@@ -25,7 +25,8 @@ from PIL import Image, ImageTk
 
 from app_config import has_gemini_api_key, load_app_config, save_app_config
 from actions.weather import get_weather_summary, get_auto_location_city
-from actions.license_manager import is_pro, activate_license, get_purchase_url, PRO_FEATURES_TR
+from actions.license_manager import (is_pro, activate_license, get_purchase_url,
+                                      PRO_FEATURES_TR, current_plan_label)
 
 # pygame ses sistemi
 try:
@@ -682,8 +683,11 @@ class ExonUI:
 
         tk.Label(win, text="✦ EXON PRO", fg=C_GOLD, bg=C_BG,
                  font=font_display(26)).pack(pady=(22, 2))
-        sub = ("Pro aktif — teşekkürler! 🎉" if pro
-               else "Tüm güçlü özelliklerin kilidini aç")
+        if pro:
+            lbl = current_plan_label()
+            sub = f"Pro aktif{(' · ' + lbl + ' plan') if lbl else ''} — teşekkürler! 🎉"
+        else:
+            sub = "Tüm güçlü özelliklerin kilidini aç — Aylık $2 / Yıllık $10"
         tk.Label(win, text=sub, fg=(C_GREEN if pro else C_CYAN), bg=C_BG,
                  font=font_body(13)).pack(pady=(0, 14))
 
@@ -694,10 +698,18 @@ class ExonUI:
                      font=font_body(12), anchor="w").pack(anchor="w", pady=1)
 
         if not pro:
-            tk.Button(win, text="💳  SATIN AL", cursor="hand2",
-                      command=lambda: webbrowser.open(get_purchase_url()),
+            plans = tk.Frame(win, bg=C_BG)
+            plans.pack(pady=(18, 4))
+            tk.Button(plans, text="Aylık · $2", cursor="hand2",
+                      command=lambda: webbrowser.open(get_purchase_url("monthly")),
+                      fg=C_BG, bg=C_CYAN, activebackground=C_ORG2, activeforeground=C_BG,
+                      font=font_body_bold(13), borderwidth=0, padx=22, pady=10).pack(side="left", padx=8)
+            tk.Button(plans, text="Yıllık · $10", cursor="hand2",
+                      command=lambda: webbrowser.open(get_purchase_url("yearly")),
                       fg=C_BG, bg=C_GOLD, activebackground=C_ORG2, activeforeground=C_BG,
-                      font=font_body_bold(13), borderwidth=0, padx=26, pady=10).pack(pady=(20, 12))
+                      font=font_body_bold(13), borderwidth=0, padx=22, pady=10).pack(side="left", padx=8)
+            tk.Label(win, text="Yıllıkta ~2 ay bedava — en avantajlısı", fg=C_MID, bg=C_BG,
+                     font=font_body(10)).pack(pady=(0, 12))
             tk.Label(win, text="Lisans anahtarın varsa gir:", fg=C_MID, bg=C_BG,
                      font=font_body(11)).pack()
             entry = tk.Entry(win, width=44, fg=C_TEXT, bg="#06101f",

@@ -83,6 +83,7 @@ from actions.news import get_news_briefing
 from actions.stocks import get_stock_price
 from actions.code_assistant import (read_code_file, list_code_files,
                                     search_in_code, write_code_file)
+from actions.studio import compose_text, summarize_url, summarize_document
 from actions.license_manager import is_pro as _is_pro, PRO_TOOLS
 from actions.wake_word import WakeWordListener
 from actions.scheduler import TaskScheduler
@@ -958,6 +959,47 @@ TOOL_DECLARATIONS = [
             },
             "required": ["path", "content"]
         }
+    },
+    {
+        "name": "compose_text",
+        "description": (
+            "İstenen tür/ton/dilde metin yazar (e-posta, blog yazısı, sosyal medya gönderisi, "
+            "deneme, özgeçmiş, ürün açıklaması vb.). Kullanıcı 'bana ... yaz' dediğinde kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "kind":     {"type": "STRING", "description": "Metin türü (e-posta, blog, tweet, deneme ...)"},
+                "topic":    {"type": "STRING", "description": "Konu/istek"},
+                "tone":     {"type": "STRING", "description": "Ton (profesyonel, samimi, resmi, esprili ...)"},
+                "language": {"type": "STRING", "description": "Dil (tr, en ...). Varsayılan tr."}
+            },
+            "required": ["topic"]
+        }
+    },
+    {
+        "name": "summarize_url",
+        "description": "Bir web sayfasını/makaleyi getirip madde madde özetler. Kullanıcı bir linki özetlemeni isterse kullan.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "url":      {"type": "STRING", "description": "Özetlenecek sayfa bağlantısı"},
+                "language": {"type": "STRING", "description": "Özet dili. Varsayılan tr."}
+            },
+            "required": ["url"]
+        }
+    },
+    {
+        "name": "summarize_document",
+        "description": "Yerel bir belgeyi (txt/md/kod; PDF varsa pypdf ile) özetler. Kullanıcı 'şu dosyayı özetle' dediğinde kullan.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "path":     {"type": "STRING", "description": "Belgenin tam yolu"},
+                "language": {"type": "STRING", "description": "Özet dili. Varsayılan tr."}
+            },
+            "required": ["path"]
+        }
     }
 ]
 
@@ -997,6 +1039,8 @@ def load_system_prompt() -> str:
         "- Uygulama aç/kapat → open_app/close_app; sekme → close_browser_tab; oyun modu → set_performance_mode; "
         "ses → set_volume; ekran görüntüsü → take_screenshot; güç → system_power (kapat/yeniden başlat için önce onay al).\n"
         "- Kod yardımı → list_code_files/read_code_file/search_in_code/write_code_file (üzerine yazmadan önce kısaca söyle).\n"
+        "- Metin yazma (e-posta/blog/sosyal medya) → compose_text. Web sayfası özeti → summarize_url. "
+        "Belge/dosya özeti → summarize_document.\n"
         "- Tekrarlayan görev → add_scheduled_task; yüz tanıma → recognize_face; ekran → analyze_screen; "
         "kalıcı bilgi → save_memory.\n"
         "ŞARKI: Kullanıcı şarkı isterse compose_song ile (tür/dil/ruh hali) söz üret; arkada ritim otomatik çalar. "
@@ -1671,6 +1715,28 @@ class ExonLive:
                         args.get("content", ""),
                     ))
                 result = r or "Dosya yazma işlemi tamamlandı."
+
+            elif name == "compose_text":
+                r = await loop.run_in_executor(
+                    None, lambda: compose_text(
+                        args.get("kind", "metin"),
+                        args.get("topic", ""),
+                        args.get("tone", "profesyonel"),
+                        args.get("language", "tr"),
+                    ))
+                result = r or "Metin üretilemedi."
+
+            elif name == "summarize_url":
+                r = await loop.run_in_executor(
+                    None, lambda: summarize_url(
+                        args.get("url", ""), args.get("language", "tr")))
+                result = r or "Özet çıkarılamadı."
+
+            elif name == "summarize_document":
+                r = await loop.run_in_executor(
+                    None, lambda: summarize_document(
+                        args.get("path", ""), args.get("language", "tr")))
+                result = r or "Özet çıkarılamadı."
 
             else:
                 result = f"Bilinmeyen araç: {name}"

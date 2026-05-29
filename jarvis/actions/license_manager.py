@@ -1,15 +1,16 @@
 """
-EXON Pro — lisans/abonelik yonetimi.
+EXON Pro — lisans/abonelik yonetimi (aylik/yillik) + Gumroad dogrulama.
 EXON Robotik tarafindan gelistirilmistir — EXON Windows Edition
 
-Para akisi (backend GEREKMEZ): satici (sen) Gumroad'da bir urun acar, fiyat koyar.
-Her alici otomatik bir LISANS ANAHTARI alir; para SENIN Gumroad hesabina gecer.
-Uygulama, anahtari Gumroad'in ucretsiz lisans dogrulama API'siyle kontrol eder.
+Para akisi (backend GEREKMEZ): satici (sen) Gumroad'da bir UYELIK (membership) urunu
+acar; iki kademe koyar: Aylik ($2/ay) ve Yillik ($10/yil). Her alici otomatik bir
+LISANS ANAHTARI alir; para SENIN Gumroad hesabina gecer. Uygulama anahtari Gumroad'in
+ucretsiz API'siyle dogrular ve ABONELIK BITTIGINDE Pro otomatik kapanir.
 
-config/api_keys.json icine:
-  "pro_purchase_url": "https://<seninhesap>.gumroad.com/l/exon-pro",
-  "gumroad_product_id": "<urun_id>"           (veya)
-  "gumroad_product_permalink": "<permalink>"
+config/api_keys.json:
+  "pro_purchase_url_monthly": "https://<hesap>.gumroad.com/l/exon-pro?variant=Ayl%C4%B1k",
+  "pro_purchase_url_yearly":  "https://<hesap>.gumroad.com/l/exon-pro?variant=Y%C4%B1ll%C4%B1k",
+  "gumroad_product_id": "<urun_id>"
 Ayrintilar: PRO_KURULUM.md
 """
 
@@ -20,12 +21,13 @@ import requests
 from app_config import get_app_config_value, save_app_config
 
 
-# Pro'ya ozel arac isimleri — main.py bu kapiyi tutar (Free kullanici cagirinca upsell doner).
+# Pro'ya ozel arac isimleri — main.py bu kapiyi tutar.
 PRO_TOOLS = {
     "generate_image", "compose_song", "get_news_briefing", "get_stock_price",
     "read_emails", "send_email", "read_code_file", "list_code_files",
     "search_in_code", "write_code_file", "set_performance_mode",
     "analyze_screen", "get_youtube_channel_report",
+    "compose_text", "summarize_url", "summarize_document",
 }
 
 # Pro tanitim ekraninda gosterilecek ozellikler
@@ -33,6 +35,8 @@ PRO_FEATURES_TR = [
     "Sinirsiz gorsel olusturma",
     "Sarki yazma & soyleme (ritimli, tonlu)",
     "Kod asistani (oku / ara / duzelt / yaz)",
+    "Metin yazarligi (e-posta, blog, sosyal medya)",
+    "Web sayfasi & dokuman ozetleme",
     "Borsa & hisse fiyatlari",
     "Gunluk haber brifingi",
     "E-posta okuma & gonderme",
@@ -41,21 +45,41 @@ PRO_FEATURES_TR = [
     "YouTube kanal analizi",
 ]
 
+# Abonelik planlari (gosterim icin)
+PLANS = {
+    "monthly": {"label": "Aylik",  "price": "$2 / ay"},
+    "yearly":  {"label": "Yillik", "price": "$10 / yil"},
+}
+
 _DEFAULT_PURCHASE_URL = "https://gumroad.com"
 _cache: bool | None = None
 
 
-def get_purchase_url() -> str:
+def _gumroad_configured() -> bool:
+    return bool(str(get_app_config_value("gumroad_product_id", "") or "").strip()
+                or str(get_app_config_value("gumroad_product_permalink", "") or "").strip())
+
+
+def get_purchase_url(plan: str = "") -> str:
+    plan = (plan or "").lower()
+    url = ""
+    if plan == "monthly":
+        url = get_app_config_value("pro_purchase_url_monthly", "")
+    elif plan == "yearly":
+        url = get_app_config_value("pro_purchase_url_yearly", "")
+    url = str(url or "").strip()
+    if url:
+        return url
     return str(get_app_config_value("pro_purchase_url", "") or _DEFAULT_PURCHASE_URL)
 
 
 def _verify_gumroad(key: str):
-    """Gumroad lisans dogrulama.
-    True = gecerli, False = gecersiz/iade, None = yapilandirilmamis veya ag yok."""
+    """True=gecerli/aktif, False=gecersiz/iade/abonelik bitti,
+    None=Gumroad yapilandirilmamis, 'neterror'=yapilandirildi ama internet yok."""
+    if not _gumroad_configured():
+        return None
     product_id = str(get_app_config_value("gumroad_product_id", "") or "").strip()
     permalink = str(get_app_config_value("gumroad_product_permalink", "") or "").strip()
-    if not product_id and not permalink:
-        return None
     try:
         data = {"license_key": (key or "").strip(), "increment_uses_count": "false"}
         if product_id:
@@ -64,32 +88,44 @@ def _verify_gumroad(key: str):
             data["product_permalink"] = permalink
         r = requests.post("https://api.gumroad.com/v2/licenses/verify",
                           data=data, timeout=10)
-        if r.status_code == 200:
-            body = r.json()
-            if body.get("success"):
-                purchase = body.get("purchase", {}) or {}
-                if (purchase.get("refunded") or purchase.get("chargebacked")
-                        or purchase.get("disputed")):
-                    return False
-                return True
-        return False
+        if r.status_code != 200:
+            return False
+        body = r.json()
+        if not body.get("success"):
+            return False
+        purchase = body.get("purchase", {}) or {}
+        if (purchase.get("refunded") or purchase.get("chargebacked")
+                or purchase.get("disputed")):
+            return False
+        # Uyelik bittiyse veya odeme basarisizsa Pro kapanir.
+        if purchase.get("subscription_ended_at") or purchase.get("subscription_failed_at"):
+            return False
+        rec = purchase.get("recurrence")  # 'monthly' | 'yearly' | None (tek seferlik)
+        if rec:
+            save_app_config({"pro_plan": rec})
+        return True
     except Exception:
-        return None
+        return "neterror"
 
 
 def _compute_pro() -> bool:
-    if bool(get_app_config_value("pro_active", False)):
-        return True
     key = str(get_app_config_value("license_key", "") or "").strip()
     if not key:
-        return False
+        # Anahtar yok: yalnizca manuel pro_active bayragi (kendi makinen icin).
+        return bool(get_app_config_value("pro_active", False))
     res = _verify_gumroad(key)
+    if res is None:
+        # Gumroad yapilandirilmamis -> cevrimdisi tolerans (test/elle satis).
+        save_app_config({"pro_active": True})
+        return True
+    if res == "neterror":
+        # Yapilandirilmis ama internet yok -> son bilinen duruma guven.
+        return bool(get_app_config_value("pro_active", False))
     if res is True:
         save_app_config({"pro_active": True})
         return True
-    if res is None:
-        # Gumroad yapilandirilmamis veya internet yok -> anahtari kabul et (cevrimdisi tolerans).
-        return True
+    # Gecersiz / abonelik bitmis
+    save_app_config({"pro_active": False})
     return False
 
 
@@ -106,6 +142,11 @@ def refresh() -> bool:
     return _cache
 
 
+def current_plan_label() -> str:
+    plan = str(get_app_config_value("pro_plan", "") or "").lower()
+    return PLANS.get(plan, {}).get("label", "")
+
+
 def activate_license(key: str):
     """Anahtari dogrular ve kaydeder. (ok: bool, mesaj: str) doner."""
     global _cache
@@ -116,9 +157,12 @@ def activate_license(key: str):
     if res is True:
         save_app_config({"license_key": key, "pro_active": True})
         _cache = True
-        return True, "EXON Pro etkinlestirildi! Tesekkurler."
+        label = current_plan_label()
+        extra = f" ({label} plan)" if label else ""
+        return True, f"EXON Pro etkinlestirildi!{extra} Tesekkurler."
     if res is False:
-        return False, "Lisans anahtari gecersiz, iade edilmis veya iptal edilmis."
+        return False, "Lisans gecersiz, iade edilmis veya abonelik bitmis."
+    # None (yapilandirilmamis) veya neterror -> kaydet ve kabul et
     save_app_config({"license_key": key, "pro_active": True})
     _cache = True
     return True, "Lisans kaydedildi ve EXON Pro acildi."
