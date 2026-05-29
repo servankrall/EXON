@@ -78,6 +78,8 @@ def get_purchase_url(plan: str = "") -> str:
     # Yedek: yalnızca Gumroad permalink ayarlıysa ürün sayfasını ondan kur.
     permalink = str(get_app_config_value("gumroad_product_permalink", "") or "").strip()
     if permalink:
+        if permalink.startswith(("http://", "https://")):
+            return permalink
         return f"https://gumroad.com/l/{permalink}"
     return ""
 
