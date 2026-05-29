@@ -93,6 +93,18 @@ EXON'a doğal dille söyle:
 - **Güç:** "bilgisayarı kilitle / uyut / yeniden başlat / kapat". Kapatma ve yeniden
   başlatmada EXON önce **onay** ister; kilitle/uyut için istemez.
 
+## 10. 🤖 Robot Yüz, Şarkı, Kod Asistanı (ek paket YOK)
+- **Robot yüzü:** Ortadaki tasarım artık **moda göre ifade değiştiren** bir robot
+  kafası: dinleme = gülümseme, konuşma = ağız oynar, düşünme = yukarı bakış + noktalar,
+  hata = kızgın, duraklatma = uyuyor (zz), oyun modu = vizör + tarama çizgisi.
+- **Şarkı:** "rap yap", "pop söyle", "duygusal bir şarkı söyle" → EXON istenen **tür ve
+  dilde anlamlı söz** yazıp seslendirir.
+- **Kod asistanı:** "şu dosyamı oku", "projede X'i ara", "şunu düzelt" → kodlarını okur,
+  arar, açıklar ve (söyleyince) düzeltme yazar.
+- **Haber & borsa:** "gündemi özetle", "Tesla hissesi kaç", "BIST ne durumda".
+- **Kişilik:** Sıcak ve enerjik; arada bir hafif espri yapar, açılışta seni **kişisel
+  olarak selamlar**.
+
 ---
 
 ### Hepsini bir arada kurmak

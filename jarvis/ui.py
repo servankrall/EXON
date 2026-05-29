@@ -348,6 +348,7 @@ class ExonUI:
         self._user_speaking_until = 0.0
         self._game_mode      = False
         self._anim_interval  = 33
+        self._face_mode      = True
 
         # ── Panel ────────────────────────────────────────────────────────────
         self._health_visible  = False
@@ -1789,6 +1790,102 @@ class ExonUI:
             c.create_oval(FCX-void_r, FCY-void_r, FCX+void_r, FCY+void_r,
                           fill=C_BG, outline="")
 
+    def _draw_face(self, c):
+        """Ortadaki tasarımı, moda göre yüz ifadesi değişen bir robot kafası olarak çizer.
+        Dinleme=gülümseme, konuşma=ağız oynar, düşünme=yukarı bakış+noktalar,
+        hata=kızgın, duraklatma=uyuyor, oyun modu=vizör."""
+        state = "PAUSED" if self.paused else self._jarvis_state
+        game  = getattr(self, "_game_mode", False)
+        R, G, B = self._orb_rgb()
+        col  = self._ac(R, G, B, 255)
+        soft = self._ac(R, G, B, 70)
+        t    = self.tick
+        FCX, FCY = self.FCX, self.FCY
+        FW = max(140, int(self.FACE * self.scale))
+        hr = int(FW * 0.30)
+
+        # Holografik robot kafası
+        c.create_oval(FCX-hr, FCY-hr, FCX+hr, FCY+hr, fill="#04101e", outline=col, width=2)
+        c.create_oval(FCX-hr-5, FCY-hr-5, FCX+hr+5, FCY+hr+5, outline=soft, width=2)
+        ant_top = FCY - hr - int(hr*0.30)
+        c.create_line(FCX, FCY-hr, FCX, ant_top, fill=col, width=3)
+        ab = max(3, int(hr*0.09))
+        pulse = 0.5 + 0.5*math.sin(t*0.2)
+        c.create_oval(FCX-ab, ant_top-ab, FCX+ab, ant_top+ab,
+                      fill=self._ac(R, G, B, int(120+135*pulse)), outline="")
+
+        edx = int(hr*0.42); ey = FCY - int(hr*0.10)
+        ew  = max(5, int(hr*0.22)); eh = max(6, int(hr*0.30))
+        lx, rx = FCX-edx, FCX+edx
+        my = FCY + int(hr*0.46); mw = int(hr*0.52)
+        blink = (t % 150) < 6
+
+        def eye_oval(cx):
+            c.create_oval(cx-ew, ey-eh, cx+ew, ey+eh, fill=col, outline="")
+            c.create_oval(cx-ew+2, ey-eh+2, cx, ey-2,
+                          fill=self._ac(255, 255, 255, 110), outline="")
+        def eye_closed(cx):
+            c.create_line(cx-ew, ey, cx+ew, ey, fill=col, width=4)
+        def eye_happy(cx):
+            c.create_arc(cx-ew, ey-eh, cx+ew, ey+eh+eh, start=30, extent=120,
+                         outline=col, width=4, style="arc")
+        def eye_up(cx):
+            c.create_oval(cx-ew, ey-eh, cx+ew, ey+eh, outline=col, width=3)
+            c.create_oval(cx-ew+1, ey-eh, cx+ew-1, ey, fill=col, outline="")
+        def eye_angry(cx, left):
+            c.create_oval(cx-ew, ey-int(eh*0.4), cx+ew, ey+eh, fill=col, outline="")
+            if left:
+                c.create_line(cx-ew, ey-eh, cx+ew, ey-int(eh*0.3), fill=col, width=4)
+            else:
+                c.create_line(cx-ew, ey-int(eh*0.3), cx+ew, ey-eh, fill=col, width=4)
+
+        def mouth_smile():
+            c.create_arc(FCX-mw, my-mw, FCX+mw, my+int(mw*0.4),
+                         start=200, extent=140, outline=col, width=4, style="arc")
+        def mouth_frown():
+            c.create_arc(FCX-mw, my-int(mw*0.4), FCX+mw, my+mw,
+                         start=20, extent=140, outline=col, width=4, style="arc")
+        def mouth_line():
+            c.create_line(FCX-mw, my, FCX+mw, my, fill=col, width=4)
+        def mouth_speak():
+            amp = abs(math.sin(t*0.5))
+            mh  = int(mw*0.18 + mw*0.55*amp)
+            c.create_oval(FCX-int(mw*0.5), my-mh//2, FCX+int(mw*0.5), my+mh//2,
+                          fill=col, outline="")
+
+        if state == "PAUSED":
+            eye_closed(lx); eye_closed(rx); mouth_line()
+            c.create_text(FCX+int(hr*0.62), FCY-int(hr*0.58), text="z z",
+                          fill=col, font=font_display(14))
+        elif state == "ERROR":
+            eye_angry(lx, True); eye_angry(rx, False); mouth_frown()
+        elif game:
+            c.create_rectangle(lx-ew-6, ey-eh//2, rx+ew+6, ey+eh//2,
+                               fill="#04101e", outline=col, width=2)
+            span = (rx+ew+6) - (lx-ew-6)
+            sxp = (lx-ew-6) + int((t*7) % max(1, span))
+            c.create_line(sxp, ey-eh//2+2, sxp, ey+eh//2-2, fill=col, width=3)
+            mouth_line()
+        elif self.speaking:
+            (eye_closed if blink else eye_happy)(lx)
+            (eye_closed if blink else eye_happy)(rx)
+            mouth_speak()
+        elif state in ("THINKING", "INITIALISING"):
+            eye_up(lx); eye_up(rx)
+            for k in range(3):
+                on = (t // 8) % 3 >= k
+                dc = col if on else soft
+                cxk = FCX - 16 + k*16
+                c.create_oval(cxk-3, my-3, cxk+3, my+3, fill=dc, outline="")
+        elif self.user_speaking:
+            eye_oval(lx); eye_oval(rx); mouth_smile()
+        else:  # LISTENING vb.
+            if blink:
+                eye_closed(lx); eye_closed(rx)
+            else:
+                eye_oval(lx); eye_oval(rx)
+            mouth_smile()
+
     def _draw(self):
         c = self.bg
         W = self.W
@@ -1818,6 +1915,8 @@ class ExonUI:
         self._draw_left_panel(c)
         self._draw_right_panel(c)
         self._draw_orb(c)
+        if getattr(self, "_face_mode", True):
+            self._draw_face(c)
 
         state_label = "PAUSED" if self.paused else self._jarvis_state
         state_col   = self._state_color(state_label)

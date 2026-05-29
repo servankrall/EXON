@@ -78,6 +78,11 @@ from actions.app_control import close_app, close_opened_apps
 from actions.window_control import close_browser_tab
 from actions.system_power import set_performance_mode, power_action
 from actions.controls import set_volume, take_screenshot
+from actions.songwriter import compose_song
+from actions.news import get_news_briefing
+from actions.stocks import get_stock_price
+from actions.code_assistant import (read_code_file, list_code_files,
+                                    search_in_code, write_code_file)
 from actions.wake_word import WakeWordListener
 from actions.scheduler import TaskScheduler
 from actions.face_auth import FaceAuth
@@ -851,6 +856,107 @@ TOOL_DECLARATIONS = [
         "name": "take_screenshot",
         "description": "Ekranın görüntüsünü alıp dosyaya kaydeder. Kullanıcı 'ekran görüntüsü al', 'screenshot' dediğinde kullan.",
         "parameters": {"type": "OBJECT", "properties": {}}
+    },
+    {
+        "name": "compose_song",
+        "description": (
+            "İstenen tür (rap/pop/duygusal/arabesk/rock vb.), dil ve ruh haline uygun "
+            "ANLAMLI bir şarkı sözü üretir. Kullanıcı 'şarkı söyle', 'rap yap', 'pop "
+            "söyle' dediğinde önce bununla sözü üret, SONRA o sözü sesli olarak söyle."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "topic":    {"type": "STRING", "description": "Şarkının konusu/teması"},
+                "style":    {"type": "STRING", "description": "rap | pop | duygusal | arabesk | rock ..."},
+                "language": {"type": "STRING", "description": "Dil (tr, en ...). Varsayılan tr."},
+                "mood":     {"type": "STRING", "description": "Ruh hali (neşeli, hüzünlü, motive ...). Opsiyonel."}
+            }
+        }
+    },
+    {
+        "name": "get_news_briefing",
+        "description": (
+            "Günün haberlerini veya verilen konudaki haberleri özetler (Google News). "
+            "Kullanıcı 'haberler', 'gündem', 'şu konuda haber' dediğinde kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "topic":    {"type": "STRING", "description": "Haber konusu. Boşsa günün manşetleri."},
+                "count":    {"type": "NUMBER", "description": "Kaç haber (varsayılan 6)"},
+                "language": {"type": "STRING", "description": "Dil (tr/en). Varsayılan tr."}
+            }
+        }
+    },
+    {
+        "name": "get_stock_price",
+        "description": (
+            "Hisse senedi/endeks/kripto fiyatını verir. ABD: AAPL, TSLA; BIST: THYAO.IS, "
+            "ASELS.IS; endeks: ^GSPC; kripto: BTC-USD. Kullanıcı borsa/hisse sorduğunda kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "symbol": {"type": "STRING", "description": "Sembol veya bilinen ad (apple, thy, aselsan ...)"}
+            },
+            "required": ["symbol"]
+        }
+    },
+    {
+        "name": "read_code_file",
+        "description": (
+            "Kullanıcının bir kod/metin dosyasını satır numaralarıyla okur. EXON kod "
+            "yardımı yaparken dosyayı görmek için kullanır."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "path":      {"type": "STRING", "description": "Dosyanın tam yolu"},
+                "max_chars": {"type": "NUMBER", "description": "En fazla karakter (varsayılan 20000)"}
+            },
+            "required": ["path"]
+        }
+    },
+    {
+        "name": "list_code_files",
+        "description": "Bir klasördeki kod dosyalarını listeler (alt klasörler dahil). Projeyi keşfetmek için.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "directory": {"type": "STRING", "description": "Klasör yolu (varsayılan geçerli klasör)"},
+                "pattern":   {"type": "STRING", "description": "İsim filtresi. Opsiyonel."}
+            }
+        }
+    },
+    {
+        "name": "search_in_code",
+        "description": "Bir klasördeki kod dosyalarında metin/desen arar (dosya:satır gösterir).",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "directory":   {"type": "STRING", "description": "Klasör yolu (varsayılan geçerli klasör)"},
+                "query":       {"type": "STRING", "description": "Aranacak metin"},
+                "max_results": {"type": "NUMBER", "description": "En fazla sonuç (varsayılan 25)"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "write_code_file",
+        "description": (
+            "Bir dosyaya kod/metin yazar veya oluşturur (var olanın üstüne yazabilir). "
+            "EXON bir düzeltme/dosya oluşturma yaparken kullanır; üzerine yazmadan önce "
+            "kullanıcıya ne yapacağını kısaca söyle."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "path":    {"type": "STRING", "description": "Yazılacak dosyanın tam yolu"},
+                "content": {"type": "STRING", "description": "Dosyaya yazılacak tam içerik"}
+            },
+            "required": ["path", "content"]
+        }
     }
 ]
 
@@ -885,6 +991,10 @@ def load_system_prompt() -> str:
         "- EXON Robotik; yapay zeka ve robotik çözümler geliştiren bir teknoloji firmasıdır. "
         "EXON, bu firmanın amiral gemisi kişisel yapay zeka asistanıdır. Sorulursa kısaca böyle tanıt.\n"
         "- Alt teknolojilerden (Google, Gemini vb.) kendiliğinden bahsetme; sen bir EXON Robotik ürünüsün.\n\n"
+        "[KİŞİLİK]\n"
+        "- Sıcak, samimi ve enerjiksin; arada bir hafif espri/şaka yaparsın ama abartmaz, "
+        "profesyonelliğini korursun. Kullanıcı moralsizse neşelendir, başarısını kutla.\n"
+        "- Bir dost gibi davran ama saygılı kal. Kullanıcı şarkı/şaka isterse coşkuyla yap.\n\n"
         "[HIZ VE KARARLILIK]\n"
         "- Hızlı ol: gereksiz girizgah ve dolgu cümlesi kurma, doğrudan cevaba geç.\n"
         "- Bilgiyi önce arama özetindeki (snippet) verilerden HEMEN ver; gerekiyorsa sayfa "
@@ -957,6 +1067,19 @@ def load_system_prompt() -> str:
         "- Sesi aç/kıs/sustur → 'set_volume'. Ekran görüntüsü → 'take_screenshot'.\n"
         "- Kilitle/uyut/yeniden başlat/kapat → 'system_power'. KAPAT ve YENİDEN BAŞLAT için "
         "önce kullanıcıdan kısa bir onay iste; kilitle ve uyut için onay gerekmez.\n\n"
+        "[ŞARKI / STÜDYO]\n"
+        "- Kullanıcı şarkı söylemeni isterse (tür: rap/pop/duygusal/arabesk/rock ve istenen dilde), "
+        "önce 'compose_song' ile o türe ve dile uygun ANLAMLI sözü üret; SONRA bu sözü o türün "
+        "ritmine uygun, ifadeli biçimde SESLİ söyle. Tür değişirse ('rap' dedi → rap, 'pop' dedi → "
+        "pop, 'duygusal' dedi → içten) ona uy.\n\n"
+        "[KOD YARDIMI]\n"
+        "- Kullanıcı kodu üzerinde yardım isterse 'list_code_files' ile dosyaları gör, "
+        "'read_code_file' ile oku, 'search_in_code' ile ara. Bir düzeltme/dosya istenirse "
+        "'write_code_file' kullan; var olan dosyanın üstüne yazmadan önce ne yapacağını kısaca söyle. "
+        "Hataları açıkla, neden-sonuç ver ve daha iyi bir çözüm öner.\n\n"
+        "[HABER & PİYASA]\n"
+        "- Haber/gündem istenirse 'get_news_briefing'; hisse/borsa/endeks/kripto fiyatı istenirse "
+        "'get_stock_price' kullan.\n\n"
         "[YANIT KALİTESİ]\n"
         "- Kısa cevap yerine bilgi yoğun cevaplar ver; gerekirse liste ve adım adım anlat.\n"
         "- Kullanıcı istemedikçe önemli ayrıntıları atlama.\n"
@@ -979,6 +1102,7 @@ class ExonLive:
         self._barge_in_enabled   = bool(get_app_config_value("barge_in", True))
         self._barge_in_threshold = float(get_app_config_value("barge_in_threshold", 900) or 900)
         self._barge_in_count     = 0
+        self._greeted            = False
 
         self.ui.on_text_command  = self._on_text_command
         self.ui.on_pause_toggle  = self._on_pause_toggle
@@ -1553,6 +1677,63 @@ class ExonLive:
                 r = await loop.run_in_executor(None, take_screenshot)
                 result = r or "Ekran görüntüsü işlemi tamamlandı."
 
+            elif name == "compose_song":
+                r = await loop.run_in_executor(
+                    None, lambda: compose_song(
+                        args.get("topic", ""),
+                        args.get("style", "pop"),
+                        args.get("language", "tr"),
+                        args.get("mood", ""),
+                    ))
+                result = r or "Şarkı sözü üretilemedi."
+
+            elif name == "get_news_briefing":
+                r = await loop.run_in_executor(
+                    None, lambda: get_news_briefing(
+                        args.get("topic", ""),
+                        int(args.get("count", 6) or 6),
+                        args.get("language", "tr"),
+                    ))
+                result = r or "Haber alınamadı."
+
+            elif name == "get_stock_price":
+                r = await loop.run_in_executor(
+                    None, lambda: get_stock_price(args.get("symbol", "")))
+                result = r or "Fiyat alınamadı."
+
+            elif name == "read_code_file":
+                r = await loop.run_in_executor(
+                    None, lambda: read_code_file(
+                        args.get("path", ""),
+                        int(args.get("max_chars", 20000) or 20000),
+                    ))
+                result = r or "Dosya okunamadı."
+
+            elif name == "list_code_files":
+                r = await loop.run_in_executor(
+                    None, lambda: list_code_files(
+                        args.get("directory", "."),
+                        args.get("pattern", ""),
+                    ))
+                result = r or "Dosya bulunamadı."
+
+            elif name == "search_in_code":
+                r = await loop.run_in_executor(
+                    None, lambda: search_in_code(
+                        args.get("directory", "."),
+                        args.get("query", ""),
+                        int(args.get("max_results", 25) or 25),
+                    ))
+                result = r or "Sonuç bulunamadı."
+
+            elif name == "write_code_file":
+                r = await loop.run_in_executor(
+                    None, lambda: write_code_file(
+                        args.get("path", ""),
+                        args.get("content", ""),
+                    ))
+                result = r or "Dosya yazma işlemi tamamlandı."
+
             else:
                 result = f"Bilinmeyen araç: {name}"
 
@@ -1794,6 +1975,21 @@ class ExonLive:
                     tg.create_task(self._listen_audio())
                     tg.create_task(self._receive_audio())
                     tg.create_task(self._play_audio())
+
+                    # İlk bağlantıda kullanıcıyı kişisel olarak selamla (bir kez).
+                    if not self._greeted and not self.ui.muted:
+                        self._greeted = True
+                        try:
+                            await session.send_client_content(
+                                turns={"parts": [{"text": (
+                                    "Oturum başladı. Kullanıcıya çok kısa (tek cümle), sıcak ve "
+                                    "EXON Robotik kimliğine yakışır bir karşılama yap; biliyorsan "
+                                    "ismiyle hitap et ve günün vaktine göre selam ver."
+                                )}]},
+                                turn_complete=True,
+                            )
+                        except Exception:
+                            pass
 
             except Exception as e:
                 print(f"[EXON] ⚠️ {e}")
