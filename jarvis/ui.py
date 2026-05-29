@@ -37,8 +37,10 @@ except Exception:
 
 BASE_DIR = Path(__file__).resolve().parent
 
-SYSTEM_NAME = "EXON"
-MODEL_BADGE = "EXON CORE · Windows"
+SYSTEM_NAME  = "EXON"
+COMPANY_NAME = "EXON ROBOTİK"
+TAGLINE      = "EXON ROBOTİK · GELİŞMİŞ YAPAY ZEKÂ ASİSTANI"
+MODEL_BADGE  = "EXON ROBOTİK · NEURAL CORE"
 
 # ── EXON renk paleti — Neon Mavi / Siyah / Hologram ──────────────────────────
 C_BG      = "#04070f"   # derin siyah-lacivert zemin
@@ -301,7 +303,7 @@ class SoundManager:
 class ExonUI:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("EXON")
+        self.root.title("EXON · EXON Robotik")
         self.root.update_idletasks()
 
         sw = self.root.winfo_screenwidth()
@@ -474,6 +476,7 @@ class ExonUI:
         self.root.after(180, self._play_startup_sfx_once)
         self._kick_brief_refresh()
         self._build_social_bar()
+        self.root.after(60, self._show_boot_splash)
         self.root.after(120, self._enter_fullscreen)
         self._animate()
         self.root.protocol("WM_DELETE_WINDOW", self._shutdown)
@@ -492,6 +495,41 @@ class ExonUI:
         self.root.attributes("-fullscreen", True)
         self.root.geometry(f"{sw}x{sh}+0+0")
         self._resize_surface(sw, sh)
+
+    def _show_boot_splash(self):
+        """Açılışta kısa bir 'EXON ROBOTİK' marka ekranı gösterir (~2.2 sn)."""
+        try:
+            sp = tk.Toplevel(self.root)
+            sp.overrideredirect(True)
+            sp.configure(bg=C_BG)
+            sp.attributes("-topmost", True)
+            w, h = 580, 300
+            sw = self.root.winfo_screenwidth()
+            sh = self.root.winfo_screenheight()
+            sp.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
+            cv = tk.Canvas(sp, width=w, height=h, bg=C_BG,
+                           highlightthickness=1, highlightbackground=C_PRI)
+            cv.pack(fill="both", expand=True)
+            # köşe parantezleri (HUD görünümü)
+            bl = 24
+            for bx, by, sx, sy in [(12, 12, 1, 1), (w - 12, 12, -1, 1),
+                                   (12, h - 12, 1, -1), (w - 12, h - 12, -1, -1)]:
+                cv.create_line(bx, by, bx + sx * bl, by, fill=C_CYAN, width=2)
+                cv.create_line(bx, by, bx, by + sy * bl, fill=C_CYAN, width=2)
+            cv.create_text(w // 2 + 2, h // 2 - 30, text="  ".join("EXON"),
+                           fill=self._ac(25, 224, 255, 90), font=font_display(44))
+            cv.create_text(w // 2, h // 2 - 32, text="  ".join("EXON"),
+                           fill=C_PRI, font=font_display(44))
+            cv.create_text(w // 2, h // 2 + 16, text="R O B O T İ K",
+                           fill=C_CYAN, font=font_display(22))
+            cv.create_line(w // 2 - 150, h // 2 + 44, w // 2 + 150, h // 2 + 44, fill=C_MID)
+            cv.create_text(w // 2, h // 2 + 66,
+                           text="Yapay Zekâ Çekirdeği başlatılıyor...",
+                           fill=C_MID, font=font_body(11))
+            sp.update_idletasks()
+            self.root.after(2200, sp.destroy)
+        except Exception:
+            pass
 
     def _set_layout_metrics(self, width: int, height: int):
         self.W = int(width)
@@ -1781,7 +1819,7 @@ class ExonUI:
         c.create_text(W//2+1, 25, text="  ".join(SYSTEM_NAME), fill=self._ac(25, 224, 255, 90),
                       font=font_display(26))
         c.create_text(W//2, 24, text="  ".join(SYSTEM_NAME), fill=C_PRI, font=font_display(26))
-        c.create_text(W//2, 52, text="ADVANCED VOICE INTELLIGENCE · NEURAL CORE",
+        c.create_text(W//2, 52, text=TAGLINE,
                       fill=C_CYAN, font=font_body(11))
         c.create_text(22, 36, text=MODEL_BADGE, fill=C_DIM, font=font_body(10), anchor="w")
 
@@ -1795,7 +1833,7 @@ class ExonUI:
         c.create_rectangle(0, H-FOOTER_H, W, H, fill="#03070f", outline="")
         c.create_line(0, H-FOOTER_H, W, H-FOOTER_H, fill=C_DIM, width=1)
         c.create_text(W//2, H-13, fill=C_DIM, font=font_body(9),
-                      text="EXON · Windows Edition · Realtime Voice Core")
+                      text="EXON ROBOTİK · EXON Yapay Zekâ Çekirdeği · Windows")
         c.create_text(W-18, H-13, fill=C_DIM, font=font_body(9),
                       text="[F4] MUTE  [F5] PAUSE  [ESC] EXIT", anchor="e")
 
@@ -1817,8 +1855,10 @@ class ExonUI:
                     else "Gemini API anahtarını girin. YouTube alanları opsiyoneldir.")
         config = load_app_config()
 
+        tk.Label(self.setup_frame, text="EXON ROBOTİK", fg=C_CYAN, bg="#03060d",
+                 font=font_display(15)).pack(pady=(22, 0))
         tk.Label(self.setup_frame, text=title, fg=C_PRI, bg="#03060d",
-                 font=font_display(20)).pack(pady=(28, 6))
+                 font=font_display(20)).pack(pady=(6, 6))
         tk.Label(self.setup_frame, text=subtitle, fg=C_MID, bg="#03060d",
                  font=font_body(13)).pack(pady=(0, 14))
         tk.Label(self.setup_frame, text="GEMINI API KEY", fg=C_DIM, bg="#03060d",
