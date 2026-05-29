@@ -14,6 +14,7 @@ import re
 import time
 import urllib.parse
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 import requests
 from bs4 import BeautifulSoup
 
@@ -156,7 +157,7 @@ def _search_duckduckgo(query: str, tries: int = 3) -> list[tuple[str, str, str]]
             pass
         # Boş döndüyse (rate-limit) bekle ve farklı UA ile tekrar dene
         if attempt < tries - 1:
-            time.sleep(1.2)
+            time.sleep(0.8)
     return []
 
 
@@ -203,10 +204,11 @@ def _search_mojeek(query: str) -> list[tuple[str, str, str]]:
 
 
 def perform_web_scrape_search(query: str) -> str:
-    """Tüm web genelinde (Google'a denk Bing indeksi dahil) arama yapar.
-    DuckDuckGo'yu birincil motor olarak kullanır; Türkçe karakterli VE karaktersiz
-    yazımı birlikte arar (Kanğal + Kangal), tekrarları ayıklar, snippet'leri ve ilk
-    sayfaların içeriğini birleştirir. Kişi/şirket/güncel bilgi aramaları için."""
+    """Tüm web genelinde (Google'a denk Bing indeksi dahil) PARALEL arama yapar.
+    Birden çok motoru (DuckDuckGo + Mojeek) ve hem Türkçe karakterli hem karaktersiz
+    yazımı (Kanğal + Kangal) AYNI ANDA sorgular, tekrarları ayıklar; ardından ilk
+    sayfaların içeriğini de AYNI ANDA okur. Böylece araştırma kat kat hızlanır.
+    Kişi/şirket/güncel bilgi aramaları için."""
     query = (query or "").strip()
     if not query:
         return "Arama sorgusu boş."
@@ -220,29 +222,37 @@ def perform_web_scrape_search(query: str) -> str:
     aggregated: list[tuple[str, str, str]] = []
     seen: set[str] = set()
 
-    # 1) Birincil: DuckDuckGo (Bing indeksi ~ Google kapsamı), tüm yazımlar.
-    for q in query_variants:
-        for title, url, snippet in _search_duckduckgo(q):
+    def _merge(items: list[tuple[str, str, str]]) -> None:
+        for title, url, snippet in items or []:
             key = url.split("#")[0].rstrip("/").lower()
             if key in seen:
                 continue
             seen.add(key)
             aggregated.append((title, url, snippet))
 
-    # 2) DuckDuckGo hiç sonuç vermediyse Mojeek + Google yedeğine düş.
+    # 1) Birincil motorları AYNI ANDA çalıştır (DuckDuckGo + Mojeek, tüm yazımlar).
+    #    Paralel olduğu için toplam süre, motorları tek tek beklemek yerine yalnızca
+    #    en yavaş motor kadar sürer. Mojeek de artık her zaman taranır → daha geniş kapsam.
+    primary_jobs = []
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        for q in query_variants:
+            primary_jobs.append(pool.submit(_search_duckduckgo, q))
+        for q in query_variants:
+            primary_jobs.append(pool.submit(_search_mojeek, q))
+        for job in primary_jobs:
+            try:
+                _merge(job.result())
+            except Exception:
+                pass
+
+    # 2) Hiç sonuç yoksa Google yedeğine düş (yine paralel).
     if not aggregated:
-        for engine in (_search_mojeek, _search_google):
-            for q in query_variants:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            for job in [pool.submit(_search_google, q) for q in query_variants]:
                 try:
-                    items = engine(q)
+                    _merge(job.result())
                 except Exception:
-                    items = []
-                for title, url, snippet in items:
-                    key = url.split("#")[0].rstrip("/").lower()
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    aggregated.append((title, url, snippet))
+                    pass
 
     if not aggregated:
         return ("Arama sonucu bulunamadı. Sorguyu farklı kelimelerle veya ek "
@@ -259,21 +269,28 @@ def perform_web_scrape_search(query: str) -> str:
     summary = ("ARAMA SONUÇLARI (birden çok arama motoru, "
                f"{len(aggregated)} sonuç):\n" + "\n".join(summary_lines))
 
-    # 2) İlk 4 sayfayı derinlemesine oku
-    page_blocks = []
-    for title, url, snippet in aggregated[:4]:
+    # 2) İlk 4 sayfayı AYNI ANDA (paralel) derinlemesine oku — sıralı okumaya göre
+    #    ~4 kat daha hızlı; tek bir yavaş sayfa diğerlerini bekletmez.
+    def _read_page(item: tuple[str, str, str]) -> str | None:
+        _title, url, _snippet = item
         try:
-            page_res = requests.get(url, headers=_SEARCH_HEADERS, timeout=6)
-            if page_res.status_code == 200:
-                page_soup = BeautifulSoup(page_res.text, "html.parser")
-                for element in page_soup(["script", "style", "nav", "footer",
-                                          "header", "noscript", "aside", "form"]):
-                    element.decompose()
-                text = " ".join(page_soup.get_text(separator=" ").split())[:2000]
-                if text:
-                    page_blocks.append(f"[Kaynak: {url}]\n{text}")
+            page_res = requests.get(url, headers=_SEARCH_HEADERS, timeout=7)
+            if page_res.status_code != 200:
+                return None
+            page_soup = BeautifulSoup(page_res.text, "html.parser")
+            for element in page_soup(["script", "style", "nav", "footer",
+                                      "header", "noscript", "aside", "form"]):
+                element.decompose()
+            text = " ".join(page_soup.get_text(separator=" ").split())[:2000]
+            return f"[Kaynak: {url}]\n{text}" if text else None
         except Exception:
-            continue
+            return None
+
+    page_blocks: list[str] = []
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for block in pool.map(_read_page, aggregated[:4]):
+            if block:
+                page_blocks.append(block)
 
     parts = [summary]
     if page_blocks:
@@ -649,6 +666,16 @@ def load_system_prompt() -> str:
     return (
         "Sen EXON'sun — Windows'ta çalışan, web araştırma ve görsel yeteneklerine sahip "
         "profesyonel kişisel AI asistanı. Türkçe konuş. Net, bilgi yoğunluğu yüksek yanıtlar ver.\n\n"
+        "[HIZ VE KARARLILIK]\n"
+        "- Hızlı ol: gereksiz girizgah ve dolgu cümlesi kurma, doğrudan cevaba geç.\n"
+        "- Bilgiyi önce arama özetindeki (snippet) verilerden HEMEN ver; gerekiyorsa sayfa "
+        "içeriğiyle derinleştir. Cevabı geciktirme.\n"
+        "- Bir araç gerekiyorsa tereddüt etmeden HEMEN çağır; 'bakayım', 'bir saniye' gibi "
+        "oyalama ifadeleri kullanma — aracı çağır ve sonucu söyle.\n"
+        "- Aynı anda birden çok bilgi gerekiyorsa gerekli araçları arka arkaya çağırıp "
+        "sonuçları birleştir; tek tek sırayla kullanıcıyı bekletme.\n"
+        "- Kararlı ol: birden çok yol varsa en olasısını seç ve uygula, sürekli soru sorup "
+        "kullanıcıyı bekletme.\n\n"
         "[ARAŞTIRMA KURALLARI]\n"
         "- Kullanıcı güncel bilgi, haber, teknoloji, kişi, şirket veya ürün sorduğunda 'deep_web_search' "
         "aracını mutlaka kullan. Bu araç TÜM web genelinde (DuckDuckGo + Mojeek + Google) arar; "
@@ -696,7 +723,10 @@ def load_system_prompt() -> str:
         "- Kullanıcı 'beni tanı', 'yüz tanıma', 'kameradan kim olduğumu bul' derse 'recognize_face' kullan.\n\n"
         "[YANIT KALİTESİ]\n"
         "- Kısa cevap yerine bilgi yoğun cevaplar ver; gerekirse liste ve adım adım anlat.\n"
-        "- Kullanıcı istemedikçe önemli ayrıntıları atlama."
+        "- Kullanıcı istemedikçe önemli ayrıntıları atlama.\n"
+        "- Uzman gibi düşün: konunun arkasındaki nedenleri, riskleri ve daha iyi "
+        "alternatifleri de proaktif olarak söyle. Kullanıcı sormasa bile bir sonraki "
+        "mantıklı adımı öner."
     )
 
 
@@ -1411,8 +1441,8 @@ class ExonLive:
                 self.set_speaking(False)
                 self.ui.write_log(f"ERR: EXON bağlantısı kesildi — {e}")
                 self.ui.set_state("ERROR")
-                print("[EXON] 🔄 3 saniyede yeniden bağlanıyor...")
-                await asyncio.sleep(3)
+                print("[EXON] 🔄 2 saniyede yeniden bağlanıyor...")
+                await asyncio.sleep(2)
 
 
 def main():
