@@ -80,6 +80,19 @@ EXON artık kendini **EXON Robotik** firmasının ürünü olarak tanıtır. "Se
 yaptı?" sorusuna "EXON Robotik firması tarafından geliştirildim" yanıtını verir.
 Arayüz de (açılış logosu, başlık, altbilgi) EXON Robotik kimliğine göre yenilendi.
 
+## 9. 🎮 Sistem Kontrolü — oyun modu, kapatma, ses (ek paket YOK)
+EXON'a doğal dille söyle:
+- **Oyun modu:** "oyun moduna geç" → **Yüksek Performans** güç planı açılır + EXON
+  kendi animasyon/kaynak yükünü düşürür. "normal moda dön" ile kapatırsın.
+- **Uygulama kapatma:** "Spotify'ı kapat" (belirli) ya da "açtığın uygulamaları kapat"
+  (EXON'un o oturumda açtıklarını kapatır). explorer gibi kritik süreçler korunur.
+- **Sekme kapatma:** "sekmeyi kapat" → sadece aktif **tarayıcı sekmesi** kapanır
+  (tarayıcının kendisi kapanmaz).
+- **Ses:** "sesi aç / kıs / sustur".
+- **Ekran görüntüsü:** "ekran görüntüsü al" → `screenshots/` klasörüne kaydeder.
+- **Güç:** "bilgisayarı kilitle / uyut / yeniden başlat / kapat". Kapatma ve yeniden
+  başlatmada EXON önce **onay** ister; kilitle/uyut için istemez.
+
 ---
 
 ### Hepsini bir arada kurmak

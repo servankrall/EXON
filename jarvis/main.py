@@ -74,6 +74,10 @@ from actions.finance import convert_currency
 from actions.translate import translate_text
 from actions.file_search import find_file
 from actions.email_tool import read_recent_emails, send_email
+from actions.app_control import close_app, close_opened_apps
+from actions.window_control import close_browser_tab
+from actions.system_power import set_performance_mode, power_action
+from actions.controls import set_volume, take_screenshot
 from actions.wake_word import WakeWordListener
 from actions.scheduler import TaskScheduler
 from actions.face_auth import FaceAuth
@@ -777,6 +781,76 @@ TOOL_DECLARATIONS = [
             },
             "required": ["to", "body"]
         }
+    },
+    {
+        "name": "close_app",
+        "description": (
+            "Bir uygulamayı kapatır. 'Spotify'ı kapat' gibi belirli bir uygulama için "
+            "app_name ver. Kullanıcı 'açtığın uygulamaları kapat' derse app_name'i BOŞ "
+            "bırak; EXON bu oturumda açtığı tüm uygulamaları kapatır. (Tarayıcı sekmesi "
+            "için bunu değil 'close_browser_tab' kullan.)"
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "app_name": {"type": "STRING", "description": "Kapatılacak uygulama adı. Boş ise EXON'un açtığı tüm uygulamalar."}
+            }
+        }
+    },
+    {
+        "name": "close_browser_tab",
+        "description": (
+            "Tarayıcının AKTİF SEKMESİNİ kapatır (Ctrl+W). Tarayıcının kendisini DEĞİL, "
+            "sadece açık sekmeyi kapatır. Kullanıcı 'sekmeyi kapat', 'şu sekmeyi kapat' dediğinde kullan."
+        ),
+        "parameters": {"type": "OBJECT", "properties": {}}
+    },
+    {
+        "name": "set_performance_mode",
+        "description": (
+            "Bilgisayarı oyun/performans moduna alır veya normale döndürür. Kullanıcı "
+            "'oyun moduna geç', 'performansı arttır' derse mode=game; 'normal moda dön' "
+            "derse mode=normal. Yüksek Performans güç planını açar ve EXON kendi kaynak "
+            "kullanımını düşürür."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "mode": {"type": "STRING", "description": "game | normal"}
+            },
+            "required": ["mode"]
+        }
+    },
+    {
+        "name": "system_power",
+        "description": (
+            "Bilgisayar güç işlemi yapar: kilitle/uyut/yeniden başlat/kapat/iptal. "
+            "shutdown ve restart İÇİN önce kullanıcıdan onay al; lock ve sleep için onay gerekmez."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "lock | sleep | restart | shutdown | cancel"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "set_volume",
+        "description": "Sistem ses seviyesini ayarlar (yükselt/azalt/sustur). Kullanıcı sesle ilgili bir şey isterse kullan.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "up | down | mute"},
+                "steps":  {"type": "NUMBER", "description": "Kaç kademe (up/down için, varsayılan 5)"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "take_screenshot",
+        "description": "Ekranın görüntüsünü alıp dosyaya kaydeder. Kullanıcı 'ekran görüntüsü al', 'screenshot' dediğinde kullan.",
+        "parameters": {"type": "OBJECT", "properties": {}}
     }
 ]
 
@@ -874,6 +948,15 @@ def load_system_prompt() -> str:
         "- 'Şu dosyayı bul', 'masaüstünde X var mı' gibi isteklerde 'find_file' kullan.\n"
         "- E-posta okumak için 'read_emails', göndermek için 'send_email' kullan; göndermeden "
         "önce alıcı, konu ve içeriği kullanıcıya kısaca özetleyip onun istediğinden emin ol.\n\n"
+        "[SİSTEM KONTROLÜ]\n"
+        "- 'Oyun moduna geç' / 'performansı arttır' → 'set_performance_mode' (mode=game). "
+        "'Normal moda dön' → mode=normal.\n"
+        "- 'Açtığın uygulamaları kapat' → 'close_app' (app_name BOŞ). Belirli uygulama için "
+        "app_name ver ('Spotify'ı kapat').\n"
+        "- 'Sekmeyi kapat' → 'close_browser_tab' (tarayıcıyı değil, sadece sekmeyi kapatır).\n"
+        "- Sesi aç/kıs/sustur → 'set_volume'. Ekran görüntüsü → 'take_screenshot'.\n"
+        "- Kilitle/uyut/yeniden başlat/kapat → 'system_power'. KAPAT ve YENİDEN BAŞLAT için "
+        "önce kullanıcıdan kısa bir onay iste; kilitle ve uyut için onay gerekmez.\n\n"
         "[YANIT KALİTESİ]\n"
         "- Kısa cevap yerine bilgi yoğun cevaplar ver; gerekirse liste ve adım adım anlat.\n"
         "- Kullanıcı istemedikçe önemli ayrıntıları atlama.\n"
@@ -1434,6 +1517,41 @@ class ExonLive:
                         args.get("body", ""),
                     ))
                 result = r or "E-posta işlemi tamamlandı."
+
+            elif name == "close_app":
+                app = str(args.get("app_name", "") or "").strip()
+                if not app or app.lower() in ("all", "hepsi", "tümü", "tumu", "hepsini", "açtıkların", "actiklarin"):
+                    r = await loop.run_in_executor(None, close_opened_apps)
+                else:
+                    r = await loop.run_in_executor(None, lambda: close_app(app))
+                result = r or "Uygulama kapatma işlemi tamamlandı."
+
+            elif name == "close_browser_tab":
+                r = await loop.run_in_executor(None, close_browser_tab)
+                result = r or "Sekme kapatma işlemi tamamlandı."
+
+            elif name == "set_performance_mode":
+                mode = str(args.get("mode", "game") or "game")
+                r = await loop.run_in_executor(None, lambda: set_performance_mode(mode))
+                try:
+                    is_game = mode.lower() not in ("normal", "off", "kapat", "kapa", "balanced", "dengeli")
+                    self.ui.set_game_mode(is_game)
+                except Exception:
+                    pass
+                result = r or "Performans modu ayarlandı."
+
+            elif name == "system_power":
+                r = await loop.run_in_executor(None, lambda: power_action(args.get("action", "")))
+                result = r or "Güç işlemi tamamlandı."
+
+            elif name == "set_volume":
+                r = await loop.run_in_executor(
+                    None, lambda: set_volume(args.get("action", "mute"), int(args.get("steps", 5) or 5)))
+                result = r or "Ses ayarlandı."
+
+            elif name == "take_screenshot":
+                r = await loop.run_in_executor(None, take_screenshot)
+                result = r or "Ekran görüntüsü işlemi tamamlandı."
 
             else:
                 result = f"Bilinmeyen araç: {name}"

@@ -346,6 +346,8 @@ class ExonUI:
         self.status_blink    = True
         self._jarvis_state   = "INITIALISING"
         self._user_speaking_until = 0.0
+        self._game_mode      = False
+        self._anim_interval  = 33
 
         # ── Panel ────────────────────────────────────────────────────────────
         self._health_visible  = False
@@ -1224,6 +1226,18 @@ class ExonUI:
             self._panel_focus_until = time.time() + max(0.8, duration_ms / 1000.0)
         self.root.after(0, _apply)
 
+    def set_game_mode(self, enabled: bool):
+        """Oyun modu: EXON animasyon hızını ve parçacık yükünü düşürür ki oyun/
+        uygulama daha akıcı çalışsın. set_performance_mode aracı tarafından çağrılır."""
+        def _apply():
+            self._game_mode = bool(enabled)
+            self._anim_interval = 60 if self._game_mode else 33
+            if self._game_mode:
+                self.write_log("SYS: 🎮 Oyun modu açık — EXON kaynak kullanımını düşürdü.")
+            else:
+                self.write_log("SYS: Oyun modu kapalı — normal moda dönüldü.")
+        self.root.after(0, _apply)
+
     def _state_color(self, state: str | None = None) -> str:
         effective = state or self._jarvis_state
         if effective == "PAUSED":
@@ -1365,7 +1379,7 @@ class ExonUI:
             self.status_blink = not self.status_blink
 
         self._draw()
-        self.root.after(33, self._animate)
+        self.root.after(self._anim_interval, self._animate)
 
     # ── Yardımcı ─────────────────────────────────────────────────────────────
     @staticmethod
@@ -1714,7 +1728,8 @@ class ExonUI:
 
         speak_shell_push = 1.16 if self.speaking else 1.07 if self.user_speaking else 1.0
         shell_r = field_r * 0.93 * speak_shell_push
-        for idx, sp in enumerate(self.orb_shell_particles):
+        _shell = self.orb_shell_particles[::2] if self._game_mode else self.orb_shell_particles
+        for idx, sp in enumerate(_shell):
             angle  = sp['angle'] + t*sp['speed']*(2.8 if self.speaking else 1.6 if self.user_speaking else 1.1)
             wobble = 1.0 + (0.07 if self.speaking else 0.035)*math.sin(t*0.08+sp['phase'])
             x = FCX + math.cos(angle)*shell_r*wobble
@@ -1742,7 +1757,8 @@ class ExonUI:
 
         field_limit = inner_r*(0.82 if self.paused else 1.36 if self.speaking else
                                1.16 if self.user_speaking else 1.0)
-        for idx, p in enumerate(self.orb_particles):
+        _orbs = self.orb_particles[::3] if self._game_mode else self.orb_particles
+        for idx, p in enumerate(_orbs):
             speed_mult = (0.10 if self.paused else 3.10 if self.speaking else
                           2.00 if self.user_speaking else 1.10)
             angle  = p['angle'] + t*p['speed']*speed_mult
@@ -1809,6 +1825,9 @@ class ExonUI:
                       fill=C_TEXT, font=font_display(18))
         c.create_text(self.FCX, self.CTRL_Y-12, text=f"● {state_label.title()}",
                       fill=state_col, font=font_body_bold(11))
+        if self._game_mode:
+            c.create_text(self.FCX, self.CTRL_Y-54, text="🎮 GAME MODE",
+                          fill=C_GREEN, font=font_body_bold(11))
 
         c.create_rectangle(0, 0, W, HDR_H, fill="#03070f", outline="")
         c.create_line(0, HDR_H, W, HDR_H, fill=C_MID, width=1)
