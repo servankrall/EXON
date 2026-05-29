@@ -28,7 +28,7 @@ DEFAULT_CONFIG = {
     "gmail_app_password": "",     # Google 'uygulama şifresi' (16 hane; normal şifre değil)
     # ── Barge-in: EXON konuşurken konuşursan susup seni dinler ──
     "barge_in": True,             # false yaparsan kapanır
-    "barge_in_threshold": 900,    # ses eşiği; düşürürsen daha hassas, yükseltirsen daha zor tetiklenir
+    "barge_in_threshold": 1100,   # ses eşiği; düşürürsen daha hassas, yükseltirsen daha zor tetiklenir
 }
 
 

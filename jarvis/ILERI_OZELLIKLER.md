@@ -98,7 +98,8 @@ EXON'a doğal dille söyle:
   kafası: dinleme = gülümseme, konuşma = ağız oynar, düşünme = yukarı bakış + noktalar,
   hata = kızgın, duraklatma = uyuyor (zz), oyun modu = vizör + tarama çizgisi.
 - **Şarkı:** "rap yap", "pop söyle", "duygusal bir şarkı söyle" → EXON istenen **tür ve
-  dilde anlamlı söz** yazıp seslendirir.
+  dilde anlamlı söz** yazıp seslendirir; **arkada o türe uygun bir ritim** otomatik çalar
+  ve **tonunu ruh haline göre** ayarlar (mutlu=canlı, hüzünlü=içten, rap=ritmik).
 - **Kod asistanı:** "şu dosyamı oku", "projede X'i ara", "şunu düzelt" → kodlarını okur,
   arar, açıklar ve (söyleyince) düzeltme yazar.
 - **Haber & borsa:** "gündemi özetle", "Tesla hissesi kaç", "BIST ne durumda".

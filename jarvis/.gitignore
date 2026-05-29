@@ -11,6 +11,8 @@ config/api_keys.json
 memory/memory.json
 memory/phone_book.json
 generated_images/
+beats/
+screenshots/
 faces/
 memory/scheduled_tasks.json
 wake/*.ppn

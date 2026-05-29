@@ -127,12 +127,15 @@ class SoundManager:
                 pygame.mixer.set_num_channels(4)
                 self._ch_ambient    = pygame.mixer.Channel(0)
                 self._ch_foreground = pygame.mixer.Channel(1)
+                self._ch_beat       = pygame.mixer.Channel(2)
             except Exception:
                 self._ch_ambient    = None
                 self._ch_foreground = None
+                self._ch_beat       = None
         else:
             self._ch_ambient    = None
             self._ch_foreground = None
+            self._ch_beat       = None
 
     # ── Dahili yardımcılar ───────────────────────────────────────────────────
 
@@ -254,6 +257,25 @@ class SoundManager:
             is_thinking = self._foreground_tag == "think"
         if is_thinking:
             self._stop_foreground()
+
+    def play_beat(self, path):
+        """Şarkı ritmini (loop) çalar — vokalin altında duyulacak şekilde."""
+        if not _PYGAME_OK or self._ch_beat is None:
+            return
+        sound = self._load(Path(path))
+        if not sound:
+            return
+        self._stop_ambient()
+        sound.set_volume(max(0.0, min(1.0, self._volume + 0.20)))
+        self._ch_beat.play(sound, loops=-1)
+
+    def stop_beat(self):
+        if self._ch_beat:
+            try:
+                self._ch_beat.stop()
+            except Exception:
+                pass
+        self.start_ambient()
 
     def toggle(self) -> bool:
         self.set_enabled(not self._enabled)
@@ -1239,6 +1261,24 @@ class ExonUI:
                 self.write_log("SYS: Oyun modu kapalı — normal moda dönüldü.")
         self.root.after(0, _apply)
 
+    def start_song_beat(self, style: str = "pop"):
+        """Şarkı söylerken arka planda türe uygun ritim/beat çalmaya başlar."""
+        def _go():
+            try:
+                from actions.beat import make_beat_loop
+                path = make_beat_loop(style)
+                if path:
+                    self.sound.play_beat(path)
+            except Exception:
+                pass
+        threading.Thread(target=_go, daemon=True).start()
+
+    def stop_song_beat(self):
+        try:
+            self.sound.stop_beat()
+        except Exception:
+            pass
+
     def _state_color(self, state: str | None = None) -> str:
         effective = state or self._jarvis_state
         if effective == "PAUSED":
@@ -1791,54 +1831,119 @@ class ExonUI:
                           fill=C_BG, outline="")
 
     def _draw_face(self, c):
-        """Ortadaki tasarımı, moda göre yüz ifadesi değişen bir robot kafası olarak çizer.
-        Dinleme=gülümseme, konuşma=ağız oynar, düşünme=yukarı bakış+noktalar,
-        hata=kızgın, duraklatma=uyuyor, oyun modu=vizör."""
+        """Ortadaki tasarım: moda göre ifade değiştiren DETAYLI robot kafası.
+        Oktagon kafa plakası, anten+sinyal, kulak modülleri, kaşlı/bebekli gözler,
+        ekolayzır ağız, tarama çizgisi, yanak ışıkları ve hafif kafa salınımı."""
         state = "PAUSED" if self.paused else self._jarvis_state
         game  = getattr(self, "_game_mode", False)
         R, G, B = self._orb_rgb()
-        col  = self._ac(R, G, B, 255)
-        soft = self._ac(R, G, B, 70)
-        t    = self.tick
-        FCX, FCY = self.FCX, self.FCY
-        FW = max(140, int(self.FACE * self.scale))
-        hr = int(FW * 0.30)
+        col   = self._ac(R, G, B, 255)
+        col2  = self._ac(R, G, B, 150)
+        soft  = self._ac(R, G, B, 70)
+        white = self._ac(255, 255, 255, 130)
+        t     = self.tick
+        bob   = int(2 * math.sin(t * 0.05))
+        FCX   = self.FCX
+        fy    = self.FCY + bob
+        FW    = max(150, int(self.FACE * self.scale))
+        hr    = int(FW * 0.30)
+        hw, hh = hr, int(hr * 1.05)
+        ch     = int(hr * 0.34)
 
-        # Holografik robot kafası
-        c.create_oval(FCX-hr, FCY-hr, FCX+hr, FCY+hr, fill="#04101e", outline=col, width=2)
-        c.create_oval(FCX-hr-5, FCY-hr-5, FCX+hr+5, FCY+hr+5, outline=soft, width=2)
-        ant_top = FCY - hr - int(hr*0.30)
-        c.create_line(FCX, FCY-hr, FCX, ant_top, fill=col, width=3)
-        ab = max(3, int(hr*0.09))
+        def oct_pts(ax0, ay0, ax1, ay1, cc):
+            return [ax0+cc, ay0, ax1-cc, ay0, ax1, ay0+cc, ax1, ay1-cc,
+                    ax1-cc, ay1, ax0+cc, ay1, ax0, ay1-cc, ax0, ay0+cc]
+
+        x0, y0, x1, y1 = FCX-hw, fy-hh, FCX+hw, fy+hh
+
+        # Boyun + omuz ipucu
+        c.create_rectangle(FCX-int(hr*0.16), y1-2, FCX+int(hr*0.16), y1+int(hr*0.18),
+                           fill="#061626", outline=col2, width=1)
+        c.create_line(FCX-int(hr*0.72), y1+int(hr*0.22), FCX+int(hr*0.72), y1+int(hr*0.22),
+                      fill=col2, width=3)
+
+        # Dış parıltı + kafa plakası (oktagon)
+        c.create_polygon(oct_pts(x0-5, y0-5, x1+5, y1+5, ch+3), fill="", outline=soft, width=2)
+        c.create_polygon(oct_pts(x0, y0, x1, y1, ch), fill="#061626", outline=col, width=2)
+        c.create_line(FCX, y0+int(hr*0.10), FCX, fy-int(hr*0.55), fill=col2, width=1)
+        for rvx, rvy in [(x0+ch, y0+6), (x1-ch, y0+6), (x0+6, y1-ch), (x1-6, y1-ch)]:
+            c.create_oval(rvx-2, rvy-2, rvx+2, rvy+2, fill=col2, outline="")
+
+        # Anten + sinyal
+        ant_top = y0 - int(hr*0.34)
+        c.create_line(FCX, y0, FCX, ant_top, fill=col, width=3)
         pulse = 0.5 + 0.5*math.sin(t*0.2)
+        ab = max(3, int(hr*0.09))
         c.create_oval(FCX-ab, ant_top-ab, FCX+ab, ant_top+ab,
-                      fill=self._ac(R, G, B, int(120+135*pulse)), outline="")
+                      fill=self._ac(R, G, B, int(110+145*pulse)), outline="")
+        if self.speaking:
+            for k in range(1, 3):
+                rr = int(hr*0.12*k) + int((t*2) % 14)
+                c.create_arc(FCX-rr, ant_top-rr, FCX+rr, ant_top+rr,
+                             start=30, extent=120, outline=soft, width=1, style="arc")
 
-        edx = int(hr*0.42); ey = FCY - int(hr*0.10)
-        ew  = max(5, int(hr*0.22)); eh = max(6, int(hr*0.30))
+        # Kulak modülleri
+        for side in (-1, 1):
+            ex = FCX + side*hw
+            c.create_rectangle(ex-int(hr*0.10), fy-int(hr*0.22),
+                               ex+int(hr*0.10), fy+int(hr*0.22),
+                               fill="#061626", outline=col2, width=1)
+            c.create_oval(ex-int(hr*0.05), fy-int(hr*0.05),
+                          ex+int(hr*0.05), fy+int(hr*0.05), outline=col, width=1)
+
+        # Yüz plakası (iç oktagon)
+        ix0, iy0 = x0+int(hr*0.16), y0+int(hr*0.22)
+        ix1, iy1 = x1-int(hr*0.16), y1-int(hr*0.16)
+        c.create_polygon(oct_pts(ix0, iy0, ix1, iy1, int(ch*0.7)),
+                         fill="#03101e", outline=col2, width=1)
+
+        # Tarama çizgisi (yüz plakasında aşağı süzülür)
+        sy = iy0 + int((t*3) % max(1, (iy1-iy0)))
+        c.create_line(ix0+4, sy, ix1-4, sy, fill=self._ac(R, G, B, 40), width=1)
+
+        # Göz/ağız metrikleri
+        edx = int(hr*0.42); ey = fy - int(hr*0.14)
+        ew  = max(6, int(hr*0.23)); eh = max(7, int(hr*0.27))
         lx, rx = FCX-edx, FCX+edx
-        my = FCY + int(hr*0.46); mw = int(hr*0.52)
+        my  = fy + int(hr*0.46); mw = int(hr*0.5)
         blink = (t % 150) < 6
 
-        def eye_oval(cx):
-            c.create_oval(cx-ew, ey-eh, cx+ew, ey+eh, fill=col, outline="")
-            c.create_oval(cx-ew+2, ey-eh+2, cx, ey-2,
-                          fill=self._ac(255, 255, 255, 110), outline="")
+        if state != "PAUSED":
+            c.create_line(lx-ew, ey-eh-int(hr*0.12), lx+ew, ey-eh-int(hr*0.12), fill=soft, width=2)
+            c.create_line(rx-ew, ey-eh-int(hr*0.12), rx+ew, ey-eh-int(hr*0.12), fill=soft, width=2)
+
+        def eye_full(cx, up=False):
+            c.create_oval(cx-ew-3, ey-eh-3, cx+ew+3, ey+eh+3, outline=soft, width=1)
+            c.create_oval(cx-ew, ey-eh, cx+ew, ey+eh, fill=self._ac(R, G, B, 170), outline=col, width=2)
+            px, py = cx, ey - (int(eh*0.42) if up else 0)
+            pr = max(3, int(ew*0.5))
+            c.create_oval(px-pr, py-pr, px+pr, py+pr, fill="#02101c", outline="")
+            c.create_oval(px-pr, py-pr, px, py, fill=white, outline="")
         def eye_closed(cx):
             c.create_line(cx-ew, ey, cx+ew, ey, fill=col, width=4)
         def eye_happy(cx):
             c.create_arc(cx-ew, ey-eh, cx+ew, ey+eh+eh, start=30, extent=120,
                          outline=col, width=4, style="arc")
-        def eye_up(cx):
-            c.create_oval(cx-ew, ey-eh, cx+ew, ey+eh, outline=col, width=3)
-            c.create_oval(cx-ew+1, ey-eh, cx+ew-1, ey, fill=col, outline="")
         def eye_angry(cx, left):
-            c.create_oval(cx-ew, ey-int(eh*0.4), cx+ew, ey+eh, fill=col, outline="")
+            c.create_oval(cx-ew, ey-int(eh*0.3), cx+ew, ey+eh, fill=self._ac(R, G, B, 170), outline=col, width=2)
+            pr = max(3, int(ew*0.45))
+            c.create_oval(cx-pr, ey-pr+int(eh*0.2), cx+pr, ey+pr+int(eh*0.2), fill="#02101c", outline="")
             if left:
-                c.create_line(cx-ew, ey-eh, cx+ew, ey-int(eh*0.3), fill=col, width=4)
+                c.create_line(cx-ew, ey-eh, cx+ew, ey-int(eh*0.2), fill=col, width=4)
             else:
-                c.create_line(cx-ew, ey-int(eh*0.3), cx+ew, ey-eh, fill=col, width=4)
+                c.create_line(cx-ew, ey-int(eh*0.2), cx+ew, ey-eh, fill=col, width=4)
 
+        def mouth_grille():
+            bars = 7
+            bw = max(3, int((mw*2)/(bars*1.6)))
+            gap = max(2, int(bw*0.6))
+            total = bars*bw + (bars-1)*gap
+            sx = FCX - total//2
+            for i in range(bars):
+                amp = abs(math.sin(t*0.4 + i*0.9))
+                bh = int(hr*0.06 + hr*0.22*amp)
+                bx = sx + i*(bw+gap)
+                c.create_rectangle(bx, my-bh, bx+bw, my+bh, fill=col, outline="")
         def mouth_smile():
             c.create_arc(FCX-mw, my-mw, FCX+mw, my+int(mw*0.4),
                          start=200, extent=140, outline=col, width=4, style="arc")
@@ -1846,45 +1951,46 @@ class ExonUI:
             c.create_arc(FCX-mw, my-int(mw*0.4), FCX+mw, my+mw,
                          start=20, extent=140, outline=col, width=4, style="arc")
         def mouth_line():
-            c.create_line(FCX-mw, my, FCX+mw, my, fill=col, width=4)
-        def mouth_speak():
-            amp = abs(math.sin(t*0.5))
-            mh  = int(mw*0.18 + mw*0.55*amp)
-            c.create_oval(FCX-int(mw*0.5), my-mh//2, FCX+int(mw*0.5), my+mh//2,
-                          fill=col, outline="")
+            c.create_line(FCX-mw, my, FCX+mw, my, fill=col2, width=4)
 
         if state == "PAUSED":
             eye_closed(lx); eye_closed(rx); mouth_line()
-            c.create_text(FCX+int(hr*0.62), FCY-int(hr*0.58), text="z z",
-                          fill=col, font=font_display(14))
+            c.create_text(FCX+int(hr*0.62), fy-int(hr*0.55), text="z z", fill=col, font=font_display(14))
         elif state == "ERROR":
             eye_angry(lx, True); eye_angry(rx, False); mouth_frown()
         elif game:
-            c.create_rectangle(lx-ew-6, ey-eh//2, rx+ew+6, ey+eh//2,
-                               fill="#04101e", outline=col, width=2)
-            span = (rx+ew+6) - (lx-ew-6)
-            sxp = (lx-ew-6) + int((t*7) % max(1, span))
+            c.create_rectangle(lx-ew-8, ey-eh//2, rx+ew+8, ey+eh//2, fill="#02101c", outline=col, width=2)
+            span = (rx+ew+8)-(lx-ew-8)
+            sxp = (lx-ew-8) + int((t*7) % max(1, span))
             c.create_line(sxp, ey-eh//2+2, sxp, ey+eh//2-2, fill=col, width=3)
-            mouth_line()
+            c.create_text(FCX, ey, text="EXON", fill=self._ac(R, G, B, 120), font=font_body_bold(8))
+            mouth_grille() if self.speaking else mouth_line()
         elif self.speaking:
             (eye_closed if blink else eye_happy)(lx)
             (eye_closed if blink else eye_happy)(rx)
-            mouth_speak()
+            mouth_grille()
         elif state in ("THINKING", "INITIALISING"):
-            eye_up(lx); eye_up(rx)
+            eye_full(lx, up=True); eye_full(rx, up=True)
             for k in range(3):
                 on = (t // 8) % 3 >= k
                 dc = col if on else soft
                 cxk = FCX - 16 + k*16
                 c.create_oval(cxk-3, my-3, cxk+3, my+3, fill=dc, outline="")
         elif self.user_speaking:
-            eye_oval(lx); eye_oval(rx); mouth_smile()
-        else:  # LISTENING vb.
+            eye_full(lx); eye_full(rx); mouth_smile()
+        else:  # LISTENING
             if blink:
                 eye_closed(lx); eye_closed(rx)
             else:
-                eye_oval(lx); eye_oval(rx)
+                eye_full(lx); eye_full(rx)
             mouth_smile()
+
+        # Yanak durum ışıkları
+        for side in (-1, 1):
+            litx = FCX + side*int(hr*0.6)
+            lit_on = self.status_blink or self.speaking
+            c.create_oval(litx-3, fy+int(hr*0.18)-3, litx+3, fy+int(hr*0.18)+3,
+                          fill=col if lit_on else soft, outline="")
 
     def _draw(self):
         c = self.bg

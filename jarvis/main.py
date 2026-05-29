@@ -1068,10 +1068,13 @@ def load_system_prompt() -> str:
         "- Kilitle/uyut/yeniden başlat/kapat → 'system_power'. KAPAT ve YENİDEN BAŞLAT için "
         "önce kullanıcıdan kısa bir onay iste; kilitle ve uyut için onay gerekmez.\n\n"
         "[ŞARKI / STÜDYO]\n"
-        "- Kullanıcı şarkı söylemeni isterse (tür: rap/pop/duygusal/arabesk/rock ve istenen dilde), "
-        "önce 'compose_song' ile o türe ve dile uygun ANLAMLI sözü üret; SONRA bu sözü o türün "
-        "ritmine uygun, ifadeli biçimde SESLİ söyle. Tür değişirse ('rap' dedi → rap, 'pop' dedi → "
-        "pop, 'duygusal' dedi → içten) ona uy.\n\n"
+        "- Kullanıcı şarkı söylemeni isterse 'compose_song' ile (tür: rap/pop/duygusal/arabesk/rock, "
+        "istenen dil ve ruh hali) ANLAMLI söz üret. Araç sözü döndürür ve arkada O TÜRE UYGUN bir "
+        "RİTİM otomatik çalmaya başlar.\n"
+        "- Sözleri ASLA düz konuşur gibi OKUMA. Gerçek bir şarkı gibi MELODİYLE, ezgiyle söyle ve "
+        "TONUNU ruh haline göre ayarla: mutlu/neşeli → canlı, parlak, hızlı; hüzünlü/duygusal → "
+        "yavaş, yumuşak, içten; rap → ritmik, vurgulu, akıcı. Arkadaki ritmin temposuna uy.\n"
+        "- Şarkıya doğrudan gir; öncesinde uzun açıklama yapma.\n\n"
         "[KOD YARDIMI]\n"
         "- Kullanıcı kodu üzerinde yardım isterse 'list_code_files' ile dosyaları gör, "
         "'read_code_file' ile oku, 'search_in_code' ile ara. Bir düzeltme/dosya istenirse "
@@ -1100,9 +1103,10 @@ class ExonLive:
         self._speaking_lock = threading.Lock()
         # Barge-in: EXON konuşurken kullanıcı konuşursa sus ve dinle.
         self._barge_in_enabled   = bool(get_app_config_value("barge_in", True))
-        self._barge_in_threshold = float(get_app_config_value("barge_in_threshold", 900) or 900)
+        self._barge_in_threshold = float(get_app_config_value("barge_in_threshold", 1100) or 1100)
         self._barge_in_count     = 0
         self._greeted            = False
+        self._singing            = False
 
         self.ui.on_text_command  = self._on_text_command
         self.ui.on_pause_toggle  = self._on_pause_toggle
@@ -1678,14 +1682,27 @@ class ExonLive:
                 result = r or "Ekran görüntüsü işlemi tamamlandı."
 
             elif name == "compose_song":
+                style = str(args.get("style", "pop") or "pop")
+                mood  = str(args.get("mood", "") or "")
                 r = await loop.run_in_executor(
                     None, lambda: compose_song(
-                        args.get("topic", ""),
-                        args.get("style", "pop"),
-                        args.get("language", "tr"),
-                        args.get("mood", ""),
+                        args.get("topic", ""), style,
+                        args.get("language", "tr"), mood,
                     ))
-                result = r or "Şarkı sözü üretilemedi."
+                if r and not self._result_looks_like_error(r):
+                    try:
+                        self._singing = True
+                        self.ui.start_song_beat(style)
+                    except Exception:
+                        pass
+                    result = (
+                        "ŞARKI HAZIR. Bu sözleri ASLA düz konuşur gibi OKUMA — gerçek bir "
+                        f"şarkı gibi MELODİYLE, {style} tarzında ve "
+                        f"{mood or 'sözlere uygun'} bir TONLA söyle. Arkada ritim çalıyor, "
+                        "temposuna uy. Doğrudan şarkıya gir, uzun açıklama yapma.\n\nSÖZLER:\n" + r
+                    )
+                else:
+                    result = r or "Şarkı sözü üretilemedi."
 
             elif name == "get_news_briefing":
                 r = await loop.run_in_executor(
@@ -1792,7 +1809,7 @@ class ExonLive:
                     # konuşursa EXON'u SUSTUR ve kullanıcıyı dinlemeye geç.
                     if self._barge_in_enabled and _audio_rms(data) >= self._barge_in_threshold:
                         self._barge_in_count += 1
-                        if self._barge_in_count >= 3:
+                        if self._barge_in_count >= 4:
                             await self._interrupt_playback()
                             self._barge_in_count = 0
                             await self.out_queue.put({"data": data, "mime_type": "audio/pcm"})
@@ -1851,6 +1868,12 @@ class ExonLive:
                                 self.ui.mark_user_activity(True)
 
                         if sc.turn_complete:
+                            if self._singing:
+                                self._singing = False
+                                try:
+                                    self.ui.stop_song_beat()
+                                except Exception:
+                                    pass
                             self.set_speaking(False)
                             full_in = " ".join(in_buf).strip()
                             if full_in:

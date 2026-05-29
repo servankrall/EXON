@@ -11,5 +11,5 @@
   "gmail_address": "",
   "gmail_app_password": "",
   "barge_in": true,
-  "barge_in_threshold": 900
+  "barge_in_threshold": 1100
 }
