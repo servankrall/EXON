@@ -12,6 +12,8 @@ dist/
 # EXON kurulum / calisma-zamani isaretleri ve gecici klasorler
 .exon_installed
 .deps_installed
+EXON_data/
+jarvis/EXON_data/
 jarvis/beats/
 jarvis/screenshots/
 jarvis/generated_images/

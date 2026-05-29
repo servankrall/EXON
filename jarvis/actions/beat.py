@@ -16,7 +16,9 @@ import wave
 from pathlib import Path
 
 
-_BEAT_DIR = Path(__file__).resolve().parent.parent / "beats"
+from paths import DATA_DIR
+
+_BEAT_DIR = DATA_DIR / "beats"
 _SR = 44100
 
 # tur -> (bpm, kick16, snare16, hat16)  her desen 16 adim, '1' = vurus

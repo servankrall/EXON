@@ -58,9 +58,19 @@ python main.py
 İlk açılışta **Gemini API anahtarınızı** girin (ekran sizi yönlendirir).
 Anahtarı [Google AI Studio](https://aistudio.google.com/apikey)'dan ücretsiz alabilirsiniz.
 
-> **Dağıtım:** Uygulamayı paylaşmak için `jarvis` klasörünü ZIP'leyip gönderin; kullanıcı
-> açıp `run.bat`'a çift tıklar, gerisi otomatik. PyInstaller'a gerek yok — paketleme
-> artıklarını (`build/`, `dist/`, `*.spec`) **`temizle.bat`** ile silebilirsiniz.
+### 📦 Dağıtım — iki seçenek
+
+**A) Klasör + `run.bat` (kullanıcıda Python olmalı):** `jarvis` klasörünü ZIP'leyip
+gönderin; kullanıcı açıp `run.bat`'a çift tıklar, gerekenleri kendi kurar.
+
+**B) Tek `.exe` (kullanıcıda Python GEREKMEZ — önerilen dağıtım):**
+`jarvis` klasöründe **`build_exe.bat`**'a çift tıklayın → `dist\EXON.exe` oluşur.
+Bu **tek dosyayı** paylaşırsınız; indiren kişi **hiçbir şey kurmadan** çift tıklayıp
+çalıştırır (Python, paketler ve tkinter exe'nin içine gömülüdür). Kullanıcı verisi
+(ayarlar, hafıza, görseller) exe'nin yanında **`EXON_data`** klasöründe tutulur.
+
+> Paketleme artıklarını (`build/`, `dist/`, `*.spec`, `__pycache__`) **`temizle.bat`**
+> ile temizleyebilirsiniz.
 
 ---
 

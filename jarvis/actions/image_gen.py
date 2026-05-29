@@ -28,8 +28,9 @@ from google.genai import types
 from app_config import get_app_config_value
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-OUTPUT_DIR = BASE_DIR / "generated_images"
+from paths import DATA_DIR
+
+OUTPUT_DIR = DATA_DIR / "generated_images"
 
 # generate_content ile çalışan Gemini görsel modelleri (hızlı/ucuz olan önce)
 GEMINI_IMAGE_MODELS = (

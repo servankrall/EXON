@@ -5,8 +5,9 @@ import json
 from pathlib import Path
 
 
-BASE_DIR = Path(__file__).resolve().parent
-CONFIG_DIR = BASE_DIR / "config"
+from paths import DATA_DIR
+
+CONFIG_DIR = DATA_DIR / "config"
 CONFIG_PATH = CONFIG_DIR / "api_keys.json"
 
 

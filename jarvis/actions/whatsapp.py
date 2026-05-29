@@ -21,9 +21,10 @@ from pathlib import Path
 from memory.memory_manager import load_memory, update_memory
 
 
+from paths import DATA_DIR
+
 AUTO_SEND_DELAY_SECONDS = 2.4
-BASE_DIR = Path(__file__).resolve().parent.parent
-PHONEBOOK_FILE = BASE_DIR / "memory" / "phone_book.json"
+PHONEBOOK_FILE = DATA_DIR / "memory" / "phone_book.json"
 
 # Windows'ta WhatsApp Desktop yolları
 _WHATSAPP_PATHS = [

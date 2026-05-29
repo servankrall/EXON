@@ -15,8 +15,9 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-FACES_DIR = BASE_DIR / "faces"
+from paths import DATA_DIR
+
+FACES_DIR = DATA_DIR / "faces"
 
 try:
     import cv2  # type: ignore

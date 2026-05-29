@@ -27,6 +27,7 @@ from app_config import has_gemini_api_key, load_app_config, save_app_config
 from actions.weather import get_weather_summary, get_auto_location_city
 from actions.license_manager import (is_pro, activate_license, get_purchase_url,
                                       PRO_FEATURES_TR, current_plan_label)
+from paths import RESOURCE_DIR
 
 # pygame ses sistemi
 try:
@@ -100,7 +101,7 @@ STATE_HEX_COLORS = {
 }
 
 # ── SFX dosya yolları ────────────────────────────────────────────────────────
-_SFX_DIR    = BASE_DIR / "SFX"
+_SFX_DIR    = RESOURCE_DIR / "SFX"
 _HUD_FILE   = _SFX_DIR / "HUD.mp3"
 _START_FILE = _SFX_DIR / "Start.mp3"
 _THINK_FILE = _SFX_DIR / "Think.mp3"
@@ -587,7 +588,7 @@ class ExonUI:
     # ── Social bar (webbrowser ile Windows uyumlu) ───────────────────────────
     def _build_social_bar(self):
         ICON_SIZE = 28
-        ICON_DIR  = BASE_DIR / "Icon"
+        ICON_DIR  = RESOURCE_DIR / "Icon"
         bar = tk.Frame(self.root, bg=C_BG)
         self._social_bar = bar
         bar.place(x=14, y=self.H - FOOTER_H - 52)

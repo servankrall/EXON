@@ -15,8 +15,9 @@ import time
 import uuid
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-TASKS_PATH = BASE_DIR / "memory" / "scheduled_tasks.json"
+from paths import DATA_DIR
+
+TASKS_PATH = DATA_DIR / "memory" / "scheduled_tasks.json"
 
 _WEEKDAY_TR = {
     "pazartesi": 0, "salı": 1, "sali": 1, "çarşamba": 2, "carsamba": 2,

@@ -12,7 +12,9 @@ import datetime
 from pathlib import Path
 
 
-_SHOT_DIR = Path(__file__).resolve().parent.parent / "screenshots"
+from paths import DATA_DIR
+
+_SHOT_DIR = DATA_DIR / "screenshots"
 
 
 def set_volume(action: str = "mute", steps: int = 5) -> str:

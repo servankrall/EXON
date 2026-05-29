@@ -14,10 +14,10 @@ import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+from paths import DATA_DIR
 
 # Windows'ta alternatif sağlık verisi kaynağı (manuel JSON)
-HEALTH_DIR = BASE_DIR / "memory" / "health"
+HEALTH_DIR = DATA_DIR / "memory" / "health"
 _MANUAL_FILE = HEALTH_DIR / "health_data.json"
 
 STALE_WARN_MINUTES = 120
