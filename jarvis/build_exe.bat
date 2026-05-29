@@ -19,11 +19,14 @@ call :try "%PROGRAMFILES%\Python311\python.exe"
 
 if not defined PYTHON (
     echo.
-    echo [HATA] Calisan bir Python bulunamadi.
-    echo  - Yazdigin "python" Microsoft Store kisayolu (stub) olabilir; o calismaz.
-    echo  - Cozum: https://www.python.org/downloads/ adresinden Python 3.12 kur
-    echo    ^("Add Python to PATH" VE "tcl/tk and IDLE" isaretli^).
-    echo  - Kurduktan sonra bu dosyaya tekrar cift tikla.
+    echo [HATA] Calisan bir Python bulunamadi ya da kurulum BOZUK.
+    echo  ^(0x80070002 = python.exe dosyasi yerinde yok; kurulum silinmis/bozulmus.^)
+    echo.
+    echo  COZUM - Python'u yeniden kur:
+    echo   1^) https://www.python.org/downloads/ ^> Python 3.12 indir
+    echo   2^) Kurulumda "Add python.exe to PATH" ISARETLI olsun
+    echo   3^) "Customize" ^> "tcl/tk and IDLE" ISARETLI olsun
+    echo   4^) Kur, sonra bu dosyaya tekrar cift tikla.
     echo.
     pause & exit /b 1
 )
@@ -41,8 +44,11 @@ pause
 endlocal
 exit /b
 
-:: ---- yardimci: aday calisiyorsa PYTHON'a ata ----
+:: ---- yardimci: aday calisiyorsa PYTHON'a ata (bozuk/eksik yollar temiz atlanir) ----
 :try
 if defined PYTHON exit /b
-%* --version >nul 2>&1 && set "PYTHON=%*"
+set "CAND=%*"
+:: Tam yol ise ve dosya yoksa hic deneme (0x80070002 gurultusunu onler)
+echo %CAND% | findstr "\\" >nul 2>&1 && ( if not exist %CAND% exit /b )
+%CAND% --version >nul 2>&1 && set "PYTHON=%CAND%"
 exit /b
