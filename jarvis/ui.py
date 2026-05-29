@@ -698,18 +698,32 @@ class ExonUI:
                      font=font_body(12), anchor="w").pack(anchor="w", pady=1)
 
         if not pro:
+            buy_note = tk.Label(win, text="", fg=C_GOLD, bg=C_BG, font=font_body(10),
+                                wraplength=470, justify="center")
+
+            def _buy(plan):
+                url = get_purchase_url(plan)
+                if url:
+                    webbrowser.open(url)
+                    buy_note.configure(text="Satın alma sayfası tarayıcıda açıldı.")
+                else:
+                    buy_note.configure(
+                        text="⚠ Satın alma bağlantısı henüz ayarlanmadı. Geliştirici: "
+                             "config/api_keys.json içine Gumroad linklerini ekle (bkz. PRO_KURULUM.md).")
+
             plans = tk.Frame(win, bg=C_BG)
             plans.pack(pady=(18, 4))
             tk.Button(plans, text="Aylık · $2", cursor="hand2",
-                      command=lambda: webbrowser.open(get_purchase_url("monthly")),
+                      command=lambda: _buy("monthly"),
                       fg=C_BG, bg=C_CYAN, activebackground=C_ORG2, activeforeground=C_BG,
                       font=font_body_bold(13), borderwidth=0, padx=22, pady=10).pack(side="left", padx=8)
             tk.Button(plans, text="Yıllık · $10", cursor="hand2",
-                      command=lambda: webbrowser.open(get_purchase_url("yearly")),
+                      command=lambda: _buy("yearly"),
                       fg=C_BG, bg=C_GOLD, activebackground=C_ORG2, activeforeground=C_BG,
                       font=font_body_bold(13), borderwidth=0, padx=22, pady=10).pack(side="left", padx=8)
             tk.Label(win, text="Yıllıkta ~2 ay bedava — en avantajlısı", fg=C_MID, bg=C_BG,
-                     font=font_body(10)).pack(pady=(0, 12))
+                     font=font_body(10)).pack(pady=(0, 4))
+            buy_note.pack(pady=(0, 8))
             tk.Label(win, text="Lisans anahtarın varsa gir:", fg=C_MID, bg=C_BG,
                      font=font_body(11)).pack()
             entry = tk.Entry(win, width=44, fg=C_TEXT, bg="#06101f",

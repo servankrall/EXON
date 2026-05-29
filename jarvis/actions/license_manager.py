@@ -51,7 +51,6 @@ PLANS = {
     "yearly":  {"label": "Yillik", "price": "$10 / yil"},
 }
 
-_DEFAULT_PURCHASE_URL = "https://gumroad.com"
 _cache: bool | None = None
 
 
@@ -61,6 +60,8 @@ def _gumroad_configured() -> bool:
 
 
 def get_purchase_url(plan: str = "") -> str:
+    """İlgili planın satın alma linkini döndürür. Ayarlı değilse BOŞ döner
+    (UI boş linkte tarayıcı açmaz, uyarı gösterir)."""
     plan = (plan or "").lower()
     url = ""
     if plan == "monthly":
@@ -70,7 +71,7 @@ def get_purchase_url(plan: str = "") -> str:
     url = str(url or "").strip()
     if url:
         return url
-    return str(get_app_config_value("pro_purchase_url", "") or _DEFAULT_PURCHASE_URL)
+    return str(get_app_config_value("pro_purchase_url", "") or "").strip()
 
 
 def _verify_gumroad(key: str):
