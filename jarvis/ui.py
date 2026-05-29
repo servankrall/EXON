@@ -369,7 +369,7 @@ class ExonUI:
         self._jarvis_state   = "INITIALISING"
         self._user_speaking_until = 0.0
         self._game_mode      = False
-        self._anim_interval  = 33
+        self._anim_interval  = 45
         self._face_mode      = True
 
         # ── Panel ────────────────────────────────────────────────────────────
@@ -432,20 +432,20 @@ class ExonUI:
             {'x': random.uniform(0, self.W), 'y': random.uniform(0, self.H),
              'vx': random.uniform(-0.15, 0.15), 'vy': random.uniform(-0.15, 0.15),
              'r': random.uniform(0.5, 1.8), 'a': random.randint(15, 70)}
-            for _ in range(24)
+            for _ in range(16)
         ]
         self.orb_particles = [
             {'angle': random.uniform(0, math.tau), 'orbit': random.uniform(0.06, 0.98),
              'speed': random.uniform(-0.030, 0.030), 'size': random.uniform(0.8, 2.8),
              'phase': random.uniform(0, math.tau), 'wobble': random.uniform(0.010, 0.040),
              'depth': random.uniform(0.30, 1.00)}
-            for _ in range(160)
+            for _ in range(90)
         ]
         self.orb_shell_particles = [
             {'angle': random.uniform(0, math.tau), 'speed': random.uniform(-0.020, 0.020),
              'size': random.uniform(1.4, 3.8), 'phase': random.uniform(0, math.tau),
              'glow': random.uniform(0.4, 1.0)}
-            for _ in range(84)
+            for _ in range(48)
         ]
 
         # ── Canvas ───────────────────────────────────────────────────────────
@@ -1254,7 +1254,7 @@ class ExonUI:
         uygulama daha akıcı çalışsın. set_performance_mode aracı tarafından çağrılır."""
         def _apply():
             self._game_mode = bool(enabled)
-            self._anim_interval = 60 if self._game_mode else 33
+            self._anim_interval = 80 if self._game_mode else 45
             if self._game_mode:
                 self.write_log("SYS: 🎮 Oyun modu açık — EXON kaynak kullanımını düşürdü.")
             else:
@@ -1327,9 +1327,12 @@ class ExonUI:
 
     def _type_char(self, text, i, tag):
         if i < len(text):
-            self.log_text.insert(tk.END, text[i], tag)
+            # Uzun metinlerde daha büyük adımlarla yaz: hem daha hızlı görünür hem de
+            # animasyon ana iş parçacığını (ve ses gönderimini) daha az meşgul eder.
+            step = max(2, len(text) // 140)
+            self.log_text.insert(tk.END, text[i:i+step], tag)
             self.log_text.see(tk.END)
-            self.root.after(7, self._type_char, text, i+1, tag)
+            self.root.after(12, self._type_char, text, i+step, tag)
         else:
             self.log_text.insert(tk.END, "\n")
             self.log_text.configure(state="disabled")
@@ -1999,7 +2002,7 @@ class ExonUI:
         t = self.tick
         c.delete("all")
 
-        step = 48
+        step = 96
         for x in range(0, W, step):
             for y in range(0, H, step):
                 c.create_rectangle(x, y, x+1, y+1, fill=C_DIMMER, outline="")
