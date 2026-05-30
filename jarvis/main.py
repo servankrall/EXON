@@ -2135,7 +2135,16 @@ class ExonLive:
                 print(f"[EXON] ⚠️ {e}")
                 traceback.print_exc()
                 self.set_speaking(False)
-                self.ui.write_log(f"ERR: EXON bağlantısı kesildi — {e}")
+                # Hatayi kullanici diline cevir (ozellikle gecersiz/eksik API anahtari).
+                low = str(e).lower()
+                if any(k in low for k in ("api key", "api_key", "permission", "401",
+                                          "403", "invalid", "unauthenticated", "quota")):
+                    self.ui.write_log(
+                        "ERR: Gemini API anahtarı geçersiz, eksik veya kotası dolmuş. "
+                        "Sağ üstteki ayarlardan (⚙) anahtarı kontrol et. "
+                        "Ücretsiz anahtar: aistudio.google.com/apikey")
+                else:
+                    self.ui.write_log(f"ERR: Bağlantı kesildi — {e}. 2 sn'de yeniden denenecek.")
                 self.ui.set_state("ERROR")
                 print("[EXON] 🔄 2 saniyede yeniden bağlanıyor...")
                 await asyncio.sleep(2)

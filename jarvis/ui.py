@@ -2208,67 +2208,107 @@ class ExonUI:
         self._close_setup_ui()
         self.setup_frame = tk.Frame(self.root, bg="#03060d",
                                     highlightbackground=C_PRI, highlightthickness=1)
-        setup_w = min(760, max(560, int(self.W*0.42)))
-        setup_h = min(520, max(430, int(self.H*0.44)))
+        setup_w = min(820, max(600, int(self.W*0.46)))
+        setup_h = min(640, max(540, int(self.H*0.58)))
         self.setup_frame.place(relx=0.5, rely=0.5, anchor="center", width=setup_w, height=setup_h)
         self.setup_frame.pack_propagate(False)
 
-        title    = "◈ API AYARLARI" if edit_mode else "◈ İLK KURULUM GEREKLİ"
-        subtitle = ("Gemini ve YouTube ayarlarınızı güncelleyin." if edit_mode
-                    else "Gemini API anahtarını girin. YouTube alanları opsiyoneldir.")
+        title    = "◈ API AYARLARI" if edit_mode else "◈ HOŞ GELDİN — TEK ADIM KALDI"
         config = load_app_config()
 
         tk.Label(self.setup_frame, text="EXON ROBOTİK", fg=C_CYAN, bg="#03060d",
-                 font=font_display(15)).pack(pady=(22, 0))
+                 font=font_display(15)).pack(pady=(18, 0))
         tk.Label(self.setup_frame, text=title, fg=C_PRI, bg="#03060d",
-                 font=font_display(20)).pack(pady=(6, 6))
-        tk.Label(self.setup_frame, text=subtitle, fg=C_MID, bg="#03060d",
-                 font=font_body(13)).pack(pady=(0, 14))
-        tk.Label(self.setup_frame, text="GEMINI API KEY", fg=C_DIM, bg="#03060d",
-                 font=font_body(12)).pack(pady=(8, 4))
+                 font=font_display(19)).pack(pady=(6, 4))
 
-        self.api_entry = tk.Entry(self.setup_frame, width=60, fg=C_TEXT, bg="#06101f",
+        if not edit_mode:
+            # Adım adım rehber kutusu
+            steps = tk.Frame(self.setup_frame, bg="#081426",
+                             highlightbackground=C_MID, highlightthickness=1)
+            steps.pack(fill="x", padx=22, pady=(4, 10))
+            tk.Label(steps, text="EXON'un konuşması için ücretsiz bir anahtar gerekir:",
+                     fg=C_CYAN, bg="#081426", font=font_body_bold(11)).pack(anchor="w", padx=12, pady=(8, 2))
+            for line in ("1) Aşağıdaki mavi butona bas → Google sayfası açılır (Gmail ile giriş yap).",
+                         "2) 'Create API key' / 'API anahtarı oluştur' butonuna bas.",
+                         "3) Çıkan anahtarı kopyala (Ctrl+C).",
+                         "4) Buraya gel, 'YAPIŞTIR' butonuna bas ve KAYDET'e tıkla."):
+                tk.Label(steps, text=line, fg=C_TEXT, bg="#081426",
+                         font=font_body(10), anchor="w", justify="left").pack(anchor="w", padx=16, pady=1)
+            tk.Button(steps, text="🔑  ÜCRETSİZ ANAHTAR SAYFASINI AÇ", cursor="hand2",
+                      command=lambda: webbrowser.open("https://aistudio.google.com/apikey"),
+                      fg=C_BG, bg=C_CYAN, activebackground=C_ORG2, activeforeground=C_BG,
+                      font=font_body_bold(12), borderwidth=0, padx=18, pady=8).pack(pady=(8, 10))
+
+        tk.Label(self.setup_frame, text="GEMINI API KEY (zorunlu)", fg=C_DIM, bg="#03060d",
+                 font=font_body(11)).pack(pady=(4, 2))
+        keyrow = tk.Frame(self.setup_frame, bg="#03060d")
+        keyrow.pack(pady=(0, 6))
+        self.api_entry = tk.Entry(keyrow, width=46, fg=C_TEXT, bg="#06101f",
                                   insertbackground=C_TEXT, borderwidth=0,
-                                  font=font_body(14), show="*")
-        self.api_entry.pack(pady=(0, 8), ipady=5)
+                                  font=font_body(13))
+        self.api_entry.pack(side="left", ipady=6)
+        self.api_entry.bind("<Return>", lambda e: self._save_api_key())
+
+        def _paste_key():
+            try:
+                clip = self.root.clipboard_get().strip()
+                if clip:
+                    self.api_entry.delete(0, tk.END)
+                    self.api_entry.insert(0, clip)
+            except Exception:
+                pass
+        tk.Button(keyrow, text="YAPIŞTIR", command=_paste_key, cursor="hand2",
+                  fg=C_PRI, bg=C_PANEL, activebackground=C_PRI, activeforeground=C_BG,
+                  font=font_body_bold(10), borderwidth=0, padx=12, pady=6).pack(side="left", padx=(8, 0))
         current_key = str(config.get("gemini_api_key", "") or "")
         if current_key:
             self.api_entry.insert(0, current_key)
 
-        tk.Label(self.setup_frame, text="YOUTUBE API KEY", fg=C_DIM, bg="#03060d",
-                 font=font_body(12)).pack(pady=(10, 4))
-        self.youtube_api_entry = tk.Entry(self.setup_frame, width=60, fg=C_TEXT, bg="#06101f",
+        # YouTube alanları — opsiyonel, küçük ve katlanır
+        tk.Label(self.setup_frame, text="(İsteğe bağlı) YouTube analizi için:",
+                 fg="#4a6a90", bg="#03060d", font=font_body(9)).pack(pady=(8, 0))
+        yt_row = tk.Frame(self.setup_frame, bg="#03060d")
+        yt_row.pack(pady=(2, 0))
+        self.youtube_api_entry = tk.Entry(yt_row, width=28, fg=C_TEXT, bg="#06101f",
                                           insertbackground=C_TEXT, borderwidth=0,
-                                          font=font_body(14), show="*")
-        self.youtube_api_entry.pack(pady=(0, 8), ipady=5)
-        current_yt = str(config.get("youtube_api_key", "") or "")
-        if current_yt:
-            self.youtube_api_entry.insert(0, current_yt)
-
-        tk.Label(self.setup_frame, text="YOUTUBE HANDLE / CHANNEL", fg=C_DIM, bg="#03060d",
-                 font=font_body(12)).pack(pady=(10, 4))
-        self.youtube_handle_entry = tk.Entry(self.setup_frame, width=60, fg=C_TEXT, bg="#06101f",
+                                          font=font_body(11), show="*")
+        self.youtube_api_entry.pack(side="left", ipady=4, padx=3)
+        self.youtube_api_entry.insert(0, str(config.get("youtube_api_key", "") or ""))
+        self.youtube_handle_entry = tk.Entry(yt_row, width=20, fg=C_TEXT, bg="#06101f",
                                              insertbackground=C_TEXT, borderwidth=0,
-                                             font=font_body(14))
-        self.youtube_handle_entry.pack(pady=(0, 8), ipady=5)
-        current_handle = str(config.get("youtube_channel_handle", "") or "")
-        if current_handle:
-            self.youtube_handle_entry.insert(0, current_handle)
+                                             font=font_body(11))
+        self.youtube_handle_entry.pack(side="left", ipady=4, padx=3)
+        self.youtube_handle_entry.insert(0, str(config.get("youtube_channel_handle", "") or ""))
+        tk.Label(self.setup_frame, text="YouTube API key            @kanal-adı",
+                 fg="#3a567a", bg="#03060d", font=font_body(8)).pack(pady=(1, 0))
+
+        self._setup_status = tk.Label(self.setup_frame, text="", fg=C_RED, bg="#03060d",
+                                      font=font_body(11))
+        self._setup_status.pack(pady=(8, 0))
 
         buttons = tk.Frame(self.setup_frame, bg="#03060d")
-        buttons.pack(pady=14)
-        tk.Button(buttons, text="▸ KAYDET", command=self._save_api_key,
-                  bg=C_BG, fg=C_PRI, activebackground="#0e3a66",
+        buttons.pack(pady=12)
+        tk.Button(buttons, text="✓  KAYDET VE BAŞLA", command=self._save_api_key, cursor="hand2",
+                  bg=C_GREEN, fg=C_BG, activebackground=C_CYAN, activeforeground=C_BG,
                   font=font_body_bold(13), borderwidth=0, padx=24, pady=10).pack(side="left", padx=8)
         if edit_mode:
-            tk.Button(buttons, text="KAPAT", command=self._close_setup_ui,
+            tk.Button(buttons, text="KAPAT", command=self._close_setup_ui, cursor="hand2",
                       bg="#0a1626", fg=C_DIM, activebackground="#143153",
                       font=font_body_bold(13), borderwidth=0, padx=24, pady=10).pack(side="left", padx=8)
+        self.api_entry.focus_set()
 
     def _save_api_key(self):
         was_ready = self._api_key_ready
         key = self.api_entry.get().strip() if self.api_entry else ""
         if not key:
+            if hasattr(self, "_setup_status"):
+                self._setup_status.configure(
+                    text="Lütfen önce anahtarı yapıştır. (Mavi butonla sayfayı aç → kopyala → YAPIŞTIR)")
+            return
+        if len(key) < 20:
+            if hasattr(self, "_setup_status"):
+                self._setup_status.configure(
+                    text="Bu anahtar çok kısa görünüyor; tam kopyaladığından emin ol.")
             return
         youtube_key    = self.youtube_api_entry.get().strip()   if self.youtube_api_entry else ""
         youtube_handle = self.youtube_handle_entry.get().strip() if self.youtube_handle_entry else ""
@@ -2285,4 +2325,4 @@ class ExonUI:
             self.write_log("SYS: API ayarlari guncellendi.")
         else:
             self.set_state("LISTENING")
-            self.write_log("SYS: EXON hazır. Dinliyorum...")
+            self.write_log("SYS: ✓ Anahtar kaydedildi. EXON hazır, dinliyorum...")
