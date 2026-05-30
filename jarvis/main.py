@@ -75,6 +75,25 @@ def _ensure_packages():
 
 _ensure_packages()
 
+
+def _preflight_native():
+    """Native (C) moduller bazi bozuk/uyumsuz kurulumlarda import sirasinda
+    0xC0000005 ile COKER. try/except bunu yakalayamaz (Python istisnasi degil).
+    Bu yuzden riskli modulu AYRI bir surecte test ederiz; cokerse ortam
+    degiskeniyle isaretleyip ana surecte HIC import etmeyiz (EXON yine acilir)."""
+    try:
+        r = subprocess.run([sys.executable, "-c", "import pygame"],
+                           capture_output=True, timeout=30)
+        if r.returncode != 0:
+            os.environ["EXON_NO_PYGAME"] = "1"
+            print(f"[EXON] 'pygame' bu sistemde sorunlu (kod {r.returncode}); "
+                  "ses efektleri devre disi, EXON yine aciliyor.")
+    except Exception:
+        os.environ["EXON_NO_PYGAME"] = "1"
+
+
+_preflight_native()
+
 import requests
 from bs4 import BeautifulSoup
 
