@@ -40,11 +40,30 @@ print("  Python surumu :", sys.version.split()[0])
 print("  Mimari (bit)  :", platform.architecture()[0], "/", platform.machine())
 print("  Python yolu   :", sys.executable)
 low = sys.executable.lower()
+here = str(Path(__file__).resolve().parent)
+problem = False
+if "onedrive" in low or "onedrive" in here.lower():
+    print("  >>> SORUN: Klasor OneDrive icinde! OneDrive dosyalari kilitleyip")
+    print("      C kutuphanelerini (pygame vb.) COKERTIR. OneDrive DISINA tasi.")
+    problem = True
+import re as _re
+if _re.search(r"[ ()]", here):
+    print("  >>> SORUN: Klasor yolunda BOSLUK veya PARANTEZ var:")
+    print("      " + here)
+    print("      Bu, native modulleri (0xC0000005) cokertir. Basit yola tasi.")
+    problem = True
 if "windowsapps" in low or "microsoft" in low:
-    print("  >>> UYARI: Microsoft Store Python'u! Cokme sebebi BU olabilir.")
-    print("      python.org surumune gecmek sorunu cozer.")
+    print("  >>> UYARI: Microsoft Store Python'u! python.org surumune gec.")
+    problem = True
 if platform.architecture()[0] == "32bit":
-    print("  >>> UYARI: 32-bit Python. 64-bit kurman onerilir.")
+    print("  >>> UYARI: 32-bit Python. 64-bit kur.")
+    problem = True
+if problem:
+    print()
+    print("  ONERILEN COZUM:")
+    print("   1) Bu 'jarvis' klasorunu kopyala")
+    print("   2) Suraya yapistir:  C:\\EXON\\jarvis   (OneDrive DISI, bosluksuz)")
+    print("   3) Oradaki EXON_Baslat.bat'a cift tikla")
 print("=" * 60)
 print("  Modulleri tek tek test ediyor...")
 print("=" * 60)

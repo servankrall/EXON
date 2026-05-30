@@ -11,6 +11,21 @@ echo      Yapay Zeka Asistani baslatiliyor...
 echo   ============================================
 echo.
 
+:: ---- Konum kontrolu: OneDrive / bosluk / parantez native cokmeye yol acar ----
+set "EXONPATH=%~dp0"
+echo "%EXONPATH%" | findstr /i "OneDrive" >nul 2>&1 && (
+    echo   [UYARI] Bu klasor OneDrive icinde! OneDrive dosyalari kilitleyip
+    echo   pygame gibi modulleri COKERTEBILIR ^(0xC0000005^).
+    echo   ONERI: Bu 'jarvis' klasorunu  C:\EXON\jarvis  altina TASI ^(OneDrive disi^).
+    echo.
+)
+echo "%EXONPATH%" | findstr "(" >nul 2>&1 && (
+    echo   [UYARI] Klasor yolunda PARANTEZ var ^(orn. "(3)"^); bu native modulleri
+    echo   cokertebilir. Klasoru  C:\EXON\jarvis  gibi BASIT bir yola tasi.
+    echo.
+)
+
+
 :: ---- Calisan Python bul (bozuk/eksik yollar ve Store stub atlanir) ----
 set "PYTHON="
 for %%C in (py python python3) do (
