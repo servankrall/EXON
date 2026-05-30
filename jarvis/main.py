@@ -184,7 +184,11 @@ CHANNELS         = 1
 SEND_SAMPLE_RATE = 16000
 RECV_SAMPLE_RATE = 24000
 CHUNK_SIZE       = 1024
-pya              = pyaudio.PyAudio()
+try:
+    pya = pyaudio.PyAudio()
+except Exception as _audio_exc:
+    print(f"[EXON] Ses aygiti baslatilamadi (mikrofon olmadan devam): {_audio_exc}")
+    pya = None
 
 # ── Web Araştırma Motoru ─────────────────────────────────────────────────────
 _SEARCH_HEADERS = {
@@ -1849,6 +1853,9 @@ class ExonLive:
 
     async def _listen_audio(self):
         print("[EXON] 🎤 Mikrofon başladı")
+        if pya is None:
+            print("[EXON] Mikrofon yok; sesli giris devre disi.")
+            return
         stream = await asyncio.to_thread(
             pya.open,
             format=FORMAT, channels=CHANNELS,
@@ -1982,6 +1989,9 @@ class ExonLive:
 
     async def _play_audio(self):
         print("[EXON] 🔊 Ses çalma başladı")
+        if pya is None:
+            print("[EXON] Ses cikisi yok; sesli yanit devre disi.")
+            return
         stream = await asyncio.to_thread(
             pya.open,
             format=FORMAT, channels=CHANNELS,

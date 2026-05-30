@@ -29,12 +29,21 @@ from actions.license_manager import (is_pro, activate_license, get_purchase_url,
                                       PRO_FEATURES_TR, current_plan_label)
 from paths import RESOURCE_DIR
 
-# pygame ses sistemi
+# pygame ses sistemi — ses karti sorunluysa bile cokmeden devam et
 try:
     import pygame
-    pygame.mixer.pre_init(44100, -16, 2, 1024)
-    pygame.mixer.init()
-    _PYGAME_OK = True
+    try:
+        pygame.mixer.pre_init(44100, -16, 2, 1024)
+        pygame.mixer.init()
+        _PYGAME_OK = True
+    except Exception:
+        # Ses aygiti yok/sorunlu: sessiz 'dummy' surucuye dus, UI yine acilsin.
+        try:
+            os.environ["SDL_AUDIODRIVER"] = "dummy"
+            pygame.mixer.init()
+            _PYGAME_OK = True
+        except Exception:
+            _PYGAME_OK = False
 except Exception:
     _PYGAME_OK = False
 
