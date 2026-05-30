@@ -5,6 +5,16 @@ Servan Kanğal tarafından yapılmıştır
 Windows ortamına uyarlanmış çalışma akışı
 """
 
+import sys
+import multiprocessing
+
+# PyInstaller .exe'lerde, alt-surec/ pencere acan herhangi bir cagri YENIDEN
+# tum main.py'yi calistirip SONSUZ pencere acabilir (fork bomb). freeze_support()
+# bunu engeller ve bir alt-surec olarak baslatildiysak burada durdurur.
+# Tum agir import'lardan ve kod calismasindan ONCE cagrilmali.
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
+
 import asyncio
 import datetime
 import threading
@@ -15,16 +25,22 @@ import time
 import array
 import math
 import urllib.parse
-import sys
 import subprocess
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
+# DONMUS (PyInstaller .exe) modda sys.executable = EXON.exe'dir. Bu modda
+# subprocess.run([sys.executable, ...]) cagrisi YENI bir EXON penceresi acar
+# ve sonsuz dongu (fork bomb) olusur. Bu yuzden exe modunda kendini-cagiran
+# tum islemler (paket kurma, alt-surec testi) DEVRE DISIDIR.
+_FROZEN = bool(getattr(sys, "frozen", False))
+
 
 def _ensure_packages():
     """Eksik 3. parti paketleri ayni Python yorumlayicisina otomatik kurar.
-    Boylece hangi baslatici kullanilirsa kullanilsin (yanlis pip'e kurulsa bile)
-    EXON kendini onarir. import_adi -> pip_adi."""
+    SADECE normal (script) calismada; exe modunda paketler zaten gomulu."""
+    if _FROZEN:
+        return
     required = {
         "requests": "requests",
         "bs4": "beautifulsoup4",
@@ -78,9 +94,10 @@ _ensure_packages()
 
 def _preflight_native():
     """Native (C) moduller bazi bozuk/uyumsuz kurulumlarda import sirasinda
-    0xC0000005 ile COKER. try/except bunu yakalayamaz (Python istisnasi degil).
-    Bu yuzden riskli modulu AYRI bir surecte test ederiz; cokerse ortam
-    degiskeniyle isaretleyip ana surecte HIC import etmeyiz (EXON yine acilir)."""
+    0xC0000005 ile COKER. AYRI surecte test edip isaretleriz.
+    SADECE normal modda; exe modunda kendini cagirmak fork bomb olusturur."""
+    if _FROZEN:
+        return
     try:
         r = subprocess.run([sys.executable, "-c", "import pygame"],
                            capture_output=True, timeout=30)
@@ -100,34 +117,36 @@ from bs4 import BeautifulSoup
 try:
     import pyaudio  # type: ignore[reportMissingModuleSource]
 except ImportError:
-    print("\n" + "="*60)
-    print("  HATA: PyAudio modulu bulunamadi!")
-    print("  Cozum - CMD'de su komutu calistirin:")
-    print("    pip install pipwin")
-    print("    pipwin install pyaudio")
-    print("  Veya: setup.bat dosyasini tekrar calistirin.")
-    print("="*60 + "\n")
-    import sys, subprocess, os
-    # Otomatik kurulum dene
-    print("  Otomatik kurulum deneniyor...")
-    r1 = subprocess.run([sys.executable, "-m", "pip", "install", "PyAudio", "--quiet"],
-                        capture_output=True)
-    try:
-        import pyaudio  # type: ignore[reportMissingModuleSource]
-        print("  PyAudio kuruldu ve yuklendi!\n")
-    except ImportError:
-        r2 = subprocess.run([sys.executable, "-m", "pip", "install", "pipwin", "--quiet"],
-                            capture_output=True)
-        r3 = subprocess.run([sys.executable, "-m", "pipwin", "install", "pyaudio"],
+    pyaudio = None
+    if _FROZEN:
+        # exe modunda kendini cagirmak fork bomb olusturur; sessizce gec.
+        print("[EXON] PyAudio yok; mikrofon devre disi (exe modu).")
+    else:
+        print("\n" + "="*60)
+        print("  HATA: PyAudio modulu bulunamadi!")
+        print("  Cozum - CMD'de su komutu calistirin:")
+        print("    pip install pipwin")
+        print("    pipwin install pyaudio")
+        print("  Veya: setup.bat dosyasini tekrar calistirin.")
+        print("="*60 + "\n")
+        # Otomatik kurulum dene
+        print("  Otomatik kurulum deneniyor...")
+        r1 = subprocess.run([sys.executable, "-m", "pip", "install", "PyAudio", "--quiet"],
                             capture_output=True)
         try:
             import pyaudio  # type: ignore[reportMissingModuleSource]
-            print("  PyAudio kuruldu (pipwin)!\n")
+            print("  PyAudio kuruldu ve yuklendi!\n")
         except ImportError:
-            print("  Otomatik kurulum basarisiz.")
-            print("  Lutfen setup.bat calistirin ve ENTER'a basin.")
-            input()
-            sys.exit(1)
+            r2 = subprocess.run([sys.executable, "-m", "pip", "install", "pipwin", "--quiet"],
+                                capture_output=True)
+            r3 = subprocess.run([sys.executable, "-m", "pipwin", "install", "pyaudio"],
+                                capture_output=True)
+            try:
+                import pyaudio  # type: ignore[reportMissingModuleSource]
+                print("  PyAudio kuruldu (pipwin)!\n")
+            except ImportError:
+                print("  Otomatik kurulum basarisiz.")
+                pyaudio = None
 from google import genai  # type: ignore[reportMissingImports]
 from google.genai import types  # type: ignore[reportMissingImports]
 
@@ -198,16 +217,19 @@ CONTROL_TOKEN_RE = re.compile(r"<ctrl\d+>", re.IGNORECASE)
 LIVE_MODEL = "models/gemini-2.5-flash-native-audio-latest"
 
 # ── Audio ───────────────────────────────────────────────────────────────────
-FORMAT           = pyaudio.paInt16
+FORMAT           = pyaudio.paInt16 if pyaudio is not None else 8
 CHANNELS         = 1
 SEND_SAMPLE_RATE = 16000
 RECV_SAMPLE_RATE = 24000
 CHUNK_SIZE       = 1024
-try:
-    pya = pyaudio.PyAudio()
-except Exception as _audio_exc:
-    print(f"[EXON] Ses aygiti baslatilamadi (mikrofon olmadan devam): {_audio_exc}")
+if pyaudio is None:
     pya = None
+else:
+    try:
+        pya = pyaudio.PyAudio()
+    except Exception as _audio_exc:
+        print(f"[EXON] Ses aygiti baslatilamadi (mikrofon olmadan devam): {_audio_exc}")
+        pya = None
 
 # ── Web Araştırma Motoru ─────────────────────────────────────────────────────
 _SEARCH_HEADERS = {
