@@ -2135,16 +2135,33 @@ class ExonLive:
                 print(f"[EXON] ⚠️ {e}")
                 traceback.print_exc()
                 self.set_speaking(False)
-                # Hatayi kullanici diline cevir (ozellikle gecersiz/eksik API anahtari).
-                low = str(e).lower()
+                # TaskGroup hatalari asil sebebi gizler; alt-hatalari ac.
+                real_errors = []
+                def _collect(exc):
+                    sub = getattr(exc, "exceptions", None)
+                    if sub:
+                        for s in sub:
+                            _collect(s)
+                    else:
+                        real_errors.append(exc)
+                _collect(e)
+                detail = "; ".join(f"{type(x).__name__}: {x}" for x in real_errors) or str(e)
+                print(f"[EXON] Gercek hata(lar): {detail}")
+                low = detail.lower()
                 if any(k in low for k in ("api key", "api_key", "permission", "401",
-                                          "403", "invalid", "unauthenticated", "quota")):
+                                          "403", "invalid", "unauthenticated", "quota",
+                                          "denied", "not found", "model")):
                     self.ui.write_log(
-                        "ERR: Gemini API anahtarı geçersiz, eksik veya kotası dolmuş. "
+                        "ERR: Gemini API anahtarı geçersiz/eksik ya da kotası dolmuş olabilir. "
                         "Sağ üstteki ayarlardan (⚙) anahtarı kontrol et. "
                         "Ücretsiz anahtar: aistudio.google.com/apikey")
+                elif any(k in low for k in ("getaddrinfo", "connection", "timeout",
+                                            "network", "ssl", "resolve", "name or service")):
+                    self.ui.write_log(
+                        "ERR: İnternet bağlantısı sorunu. Bağlantını kontrol et; "
+                        "2 sn'de yeniden denenecek.")
                 else:
-                    self.ui.write_log(f"ERR: Bağlantı kesildi — {e}. 2 sn'de yeniden denenecek.")
+                    self.ui.write_log(f"ERR: {detail[:200]}. 2 sn'de yeniden denenecek.")
                 self.ui.set_state("ERROR")
                 print("[EXON] 🔄 2 saniyede yeniden bağlanıyor...")
                 await asyncio.sleep(2)
