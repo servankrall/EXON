@@ -30,7 +30,7 @@ echo "%EXONPATH%" | findstr "(" >nul 2>&1 && (
 set "PYTHON="
 for %%C in (py python python3) do (
     if not defined PYTHON (
-        %%C -c "import sys" >nul 2>&1 && set "PYTHON=%%C"
+        %%C -c "import tkinter" >nul 2>&1 && set "PYTHON=%%C"
     )
 )
 if not defined PYTHON (
@@ -40,7 +40,7 @@ if not defined PYTHON (
         "%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
         "%PROGRAMFILES%\Python313\python.exe"
         "%PROGRAMFILES%\Python312\python.exe"
-    ) do ( if not defined PYTHON if exist %%P ( %%P -c "import sys" >nul 2>&1 && set "PYTHON=%%P" ) )
+    ) do ( if not defined PYTHON if exist %%P ( %%P -c "import tkinter" >nul 2>&1 && set "PYTHON=%%P" ) )
 )
 
 :: ---- Python yoksa OTOMATIK indir + sessiz kur ----
