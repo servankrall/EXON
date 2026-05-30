@@ -9,9 +9,15 @@ echo    (cokme veren paketler yeniden kurulur)
 echo  ============================================
 echo.
 
+:: tkinter'i olan GERCEK Python'u sec (klasordeki gomulu python.exe elenir)
 set "PYTHON="
 for %%C in (py python python3) do (
-    if not defined PYTHON ( %%C -c "import sys" >nul 2>&1 && set "PYTHON=%%C" )
+    if not defined PYTHON ( %%C -c "import tkinter" >nul 2>&1 && set "PYTHON=%%C" )
+)
+if not defined PYTHON (
+    for %%C in (py python python3) do (
+        if not defined PYTHON ( %%C -c "import sys" >nul 2>&1 && set "PYTHON=%%C" )
+    )
 )
 if not defined PYTHON (
     echo [HATA] Python bulunamadi.
