@@ -1,10 +1,10 @@
 """
-EXON tek-exe derleyici (cok-denemeli, saglam surum).
-Kullanim:  python build_exe.py     (veya build_exe.bat'a cift tikla)
+EXON exe derleyici — en saglam surum (onedir oncelikli).
+Kullanim:  python build_exe.py
 
-Neden cok-denemeli? PyInstaller bazi paketleri (ozellikle --collect-all comtypes
-ve namespace 'google') derinlemesine tararken COKEBILIR (0xC0000005). Bu yuzden
-once EN SADE ayarlarla denenir; exe cikmazsa biraz daha ekleyip tekrar denenir.
+0xC0000005 cokmesi cogunlukla --onefile bootloader'indan ve UPX'ten gelir.
+Bu yuzden ONCE --onedir (klasor) + --noupx denenir (en guvenilir). Olmazsa
+--onefile denenir. PyInstaller temiz kurulup DOGRULANIR.
 EXON Robotik tarafindan gelistirilmistir.
 """
 
@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import importlib.util
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -20,32 +19,49 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 os.chdir(HERE)
 SEP = ";" if os.name == "nt" else ":"
-EXE = HERE / "dist" / ("EXON.exe" if os.name == "nt" else "EXON")
+PY = sys.executable
 
 
-def have(module: str) -> bool:
+def have(m: str) -> bool:
     try:
-        return importlib.util.find_spec(module) is not None
+        return importlib.util.find_spec(m) is not None
     except Exception:
         return False
 
 
-# ── 1) Gerekli paketler (toleransli) ─────────────────────────────────────────
+def pipi(*pkgs: str) -> None:
+    subprocess.run([PY, "-m", "pip", "install", "--upgrade", *pkgs])
+
+
 print("=" * 60)
-print("  EXON - tek dosya .exe derleme")
+print("  EXON - exe derleme (saglam surum)")
 print("=" * 60)
-print("\n[1/3] Paketler kuruluyor (birkac dakika surebilir)...")
-subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
+
+# ── 1) Uygulama paketleri ────────────────────────────────────────────────────
+print("\n[1/4] Uygulama paketleri kuruluyor...")
+subprocess.run([PY, "-m", "pip", "install", "--upgrade", "pip"])
 for pkg in ("google-genai", "psutil", "Pillow", "requests", "beautifulsoup4",
             "pygame", "pyttsx3", "pyperclip", "pyautogui", "pygetwindow",
             "pywin32", "comtypes", "pyaudio", "SpeechRecognition"):
-    subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", pkg])
-subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pyinstaller"])
+    subprocess.run([PY, "-m", "pip", "install", "--upgrade", pkg])
+
+# ── 2) PyInstaller temiz kur + DOGRULA ───────────────────────────────────────
+print("\n[2/4] PyInstaller kuruluyor ve dogrulaniyor...")
+subprocess.run([PY, "-m", "pip", "uninstall", "-y", "pyinstaller"])
+pipi("pyinstaller")
+check = subprocess.run([PY, "-m", "PyInstaller", "--version"],
+                       capture_output=True, text=True)
+if check.returncode != 0:
+    print("\n  [HATA] PyInstaller kurulamadi/calismiyor.")
+    print("  Cikti:", (check.stderr or check.stdout or "").strip()[:300])
+    print("  Elle dene:  python -m pip install --force-reinstall pyinstaller")
+    input("\n  ENTER ile cik...")
+    sys.exit(1)
+print("  PyInstaller surumu:", (check.stdout or "").strip())
 
 
-# ── Ortak argumanlar ─────────────────────────────────────────────────────────
 def base_args() -> list[str]:
-    a = ["--noconfirm", "--onefile", "--windowed", "--name", "EXON"]
+    a = ["--noconfirm", "--clean", "--noupx", "--windowed", "--name", "EXON"]
     if (HERE / "EXON.ico").is_file():
         a += ["--icon", "EXON.ico"]
     for folder in ("SFX", "Icon", "Fonts", "core"):
@@ -53,65 +69,50 @@ def base_args() -> list[str]:
             a += ["--add-data", f"{folder}{SEP}{folder}"]
     if (HERE / "config" / "api_keys.example.json").is_file():
         a += ["--add-data", f"config{os.sep}api_keys.example.json{SEP}config"]
-    # Hooklarin yakalayamadigi gizli importlar (hafif, cokme riski yok)
     for h in ("pyttsx3.drivers.sapi5", "win32com.client", "pythoncom", "pywintypes",
               "pyaudio", "psutil", "requests", "bs4", "PIL._tkinter_finder"):
-        root = h.split(".")[0]
-        if have(root):
+        if have(h.split(".")[0]):
             a += ["--hidden-import", h]
-    # google-genai icin metadata (namespace paketi); collect-all'dan daha guvenli
     if have("google.genai"):
-        a += ["--collect-submodules", "google.genai",
-              "--copy-metadata", "google-genai"]
+        a += ["--collect-submodules", "google.genai", "--copy-metadata", "google-genai"]
     return a
 
 
-def run(extra: list[str], clean: bool) -> bool:
-    args = base_args() + extra
-    if clean:
-        args = ["--clean"] + args
-    args += ["main.py"]
+def run(mode_args: list[str]) -> bool:
+    args = base_args() + mode_args + ["main.py"]
     print("\n  python -m PyInstaller " + " ".join(args) + "\n")
-    if EXE.exists():
-        try:
-            EXE.unlink()
-        except Exception:
-            pass
-    r = subprocess.run([sys.executable, "-m", "PyInstaller", *args])
-    ok = (r.returncode == 0 and EXE.exists())
-    print(f"\n  -> cikis kodu {r.returncode}; exe {'VAR' if EXE.exists() else 'YOK'}")
-    return ok
+    r = subprocess.run([PY, "-m", "PyInstaller", *args])
+    print(f"\n  -> PyInstaller cikis kodu: {r.returncode}")
+    return r.returncode == 0
 
 
-# ── 2) Denemeler: sadeden -> kapsamliya ──────────────────────────────────────
-print("\n[2/3] Derleniyor...")
-print("\n--- Deneme 1/3: sade (yerlesik hooklara guven) ---")
-ok = run([], clean=True)
+onedir_exe = HERE / "dist" / "EXON" / ("EXON.exe" if os.name == "nt" else "EXON")
+onefile_exe = HERE / "dist" / ("EXON.exe" if os.name == "nt" else "EXON")
 
-if not ok:
-    print("\n--- Deneme 2/3: pygame + bs4 submodulleri ---")
-    extra = []
-    if have("pygame"):
-        extra += ["--collect-submodules", "pygame"]
-    if have("bs4"):
-        extra += ["--collect-all", "bs4"]
-    ok = run(extra, clean=True)
+# ── 3) Deneme 1: onedir (klasor) — EN GUVENILIR ──────────────────────────────
+print("\n[3/4] Deneme 1: --onedir (klasor modu, en saglam)...")
+run(["--onedir"])
+result = "onedir" if onedir_exe.exists() else ""
 
-if not ok:
-    print("\n--- Deneme 3/3: konsol modu (hatayi gormek icin) ---")
-    # comtypes'i KASTEN dislariz (0xC0000005 cokmesinin baslica sebebi)
-    ok = run(["--console", "--exclude-module", "comtypes"], clean=True)
+# ── 4) Deneme 2: onefile (tek dosya) ─────────────────────────────────────────
+if not result:
+    print("\n[4/4] Deneme 2: --onefile (tek dosya)...")
+    run(["--onefile"])
+    result = "onefile" if onefile_exe.exists() else ""
 
-# ── 3) Sonuc ─────────────────────────────────────────────────────────────────
+# ── Sonuc ────────────────────────────────────────────────────────────────────
 print("\n" + "=" * 60)
-if ok:
-    print("  BASARILI!  ->  " + str(EXE))
+if result == "onedir":
+    print("  BASARILI (klasor modu)!")
+    print("  ->  dist\\EXON\\  klasorunun TAMAMINI paylas (zip'le).")
+    print("  Acan kisi icindeki EXON.exe'ye cift tiklar, Python GEREKMEZ.")
+elif result == "onefile":
+    print("  BASARILI (tek dosya)!  ->  dist\\EXON.exe")
     print("  Bu tek dosyayi paylas; acan kisi Python KURMADAN calistirir.")
-    print("  Kullanici verisi exe yanindaki 'EXON_data' klasorunde tutulur.")
 else:
-    print("  Derleme tamamlanamadi.")
-    print("  - 0xC0000005 / cokme genelde antivirus VEYA bozuk PyInstaller onbellegi.")
-    print("  - Cozum 1: Antivirusu gecici kapat, tekrar dene.")
-    print("  - Cozum 2: Onbellegi temizle:  python -m PyInstaller --clean ...")
-    print("  - Yukarida 'ERROR:' satiri varsa bana yapistir.")
+    print("  Iki mod da basarisiz oldu.")
+    print("  Bu makinede PyInstaller calismiyor olabilir. ALTERNATIF (kesin calisir):")
+    print("   - exe YERINE: klasoru zip'le, karsi taraf Python kurup run.bat'a tiklar.")
+    print("   - Ya da yukaridaki ilk 'ERROR' satirini bana yapistir.")
 print("=" * 60)
+input("\n  ENTER ile kapat...")
