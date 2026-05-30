@@ -1897,12 +1897,21 @@ class ExonLive:
         if pya is None:
             print("[EXON] Mikrofon yok; sesli giris devre disi.")
             return
-        stream = await asyncio.to_thread(
-            pya.open,
-            format=FORMAT, channels=CHANNELS,
-            rate=SEND_SAMPLE_RATE, input=True,
-            frames_per_buffer=CHUNK_SIZE,
-        )
+        try:
+            stream = await asyncio.to_thread(
+                pya.open,
+                format=FORMAT, channels=CHANNELS,
+                rate=SEND_SAMPLE_RATE, input=True,
+                frames_per_buffer=CHUNK_SIZE,
+            )
+        except Exception as exc:
+            # Mikrofon yok/kapali: TUM uygulamayi cokertme; sadece sesli girisi kapat.
+            print(f"[EXON] Mikrofon acilamadi: {exc}")
+            self.ui.write_log(
+                "SYS: 🎤 Mikrofon bulunamadı — yazarak sohbet edebilirsin. "
+                "Mikrofon takılıysa Windows ses ayarlarından 'giriş aygıtı' seç.")
+            self._mic_ok = False
+            return
         try:
             while True:
                 data = await asyncio.to_thread(stream.read, CHUNK_SIZE, exception_on_overflow=False)
@@ -2033,11 +2042,18 @@ class ExonLive:
         if pya is None:
             print("[EXON] Ses cikisi yok; sesli yanit devre disi.")
             return
-        stream = await asyncio.to_thread(
-            pya.open,
-            format=FORMAT, channels=CHANNELS,
-            rate=RECV_SAMPLE_RATE, output=True,
-        )
+        try:
+            stream = await asyncio.to_thread(
+                pya.open,
+                format=FORMAT, channels=CHANNELS,
+                rate=RECV_SAMPLE_RATE, output=True,
+            )
+        except Exception as exc:
+            # Hoparlor/cikis aygiti yok: cokertme; sesli yaniti sessizce kapat.
+            print(f"[EXON] Ses cikisi acilamadi: {exc}")
+            self.ui.write_log(
+                "SYS: 🔊 Ses çıkış aygıtı bulunamadı — yanıtlar yazıyla görünür.")
+            return
         try:
             while True:
                 chunk = await self.audio_in_queue.get()
@@ -2045,7 +2061,6 @@ class ExonLive:
                 await asyncio.to_thread(stream.write, chunk)
         except Exception as e:
             print(f"[EXON] ❌ Ses: {e}")
-            raise
         finally:
             self.set_speaking(False)
             stream.close()
