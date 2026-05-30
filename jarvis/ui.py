@@ -29,23 +29,27 @@ from actions.license_manager import (is_pro, activate_license, get_purchase_url,
                                       PRO_FEATURES_TR, current_plan_label)
 from paths import RESOURCE_DIR
 
-# pygame ses sistemi — ses karti sorunluysa bile cokmeden devam et
-try:
-    import pygame
+# pygame ses sistemi — bozuk/sorunlu kurulumda cokmeden devam et.
+# main.py preflight'i pygame'i guvensiz bulduysa HIC import etmeyiz (segfault korumasi).
+if os.environ.get("EXON_NO_PYGAME") == "1":
+    _PYGAME_OK = False
+else:
     try:
-        pygame.mixer.pre_init(44100, -16, 2, 1024)
-        pygame.mixer.init()
-        _PYGAME_OK = True
-    except Exception:
-        # Ses aygiti yok/sorunlu: sessiz 'dummy' surucuye dus, UI yine acilsin.
+        import pygame
         try:
-            os.environ["SDL_AUDIODRIVER"] = "dummy"
+            pygame.mixer.pre_init(44100, -16, 2, 1024)
             pygame.mixer.init()
             _PYGAME_OK = True
         except Exception:
-            _PYGAME_OK = False
-except Exception:
-    _PYGAME_OK = False
+            # Ses aygiti yok/sorunlu: sessiz 'dummy' surucuye dus, UI yine acilsin.
+            try:
+                os.environ["SDL_AUDIODRIVER"] = "dummy"
+                pygame.mixer.init()
+                _PYGAME_OK = True
+            except Exception:
+                _PYGAME_OK = False
+    except Exception:
+        _PYGAME_OK = False
 
 BASE_DIR = Path(__file__).resolve().parent
 

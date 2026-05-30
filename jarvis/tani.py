@@ -33,7 +33,20 @@ TESTS = [
 ]
 
 print("=" * 60)
-print("  EXON tani - modulleri tek tek test ediyor")
+print("  EXON tani - sistem bilgisi")
+print("=" * 60)
+import platform
+print("  Python surumu :", sys.version.split()[0])
+print("  Mimari (bit)  :", platform.architecture()[0], "/", platform.machine())
+print("  Python yolu   :", sys.executable)
+low = sys.executable.lower()
+if "windowsapps" in low or "microsoft" in low:
+    print("  >>> UYARI: Microsoft Store Python'u! Cokme sebebi BU olabilir.")
+    print("      python.org surumune gecmek sorunu cozer.")
+if platform.architecture()[0] == "32bit":
+    print("  >>> UYARI: 32-bit Python. 64-bit kurman onerilir.")
+print("=" * 60)
+print("  Modulleri tek tek test ediyor...")
 print("=" * 60)
 
 crashed, failed, ok = [], [], []
