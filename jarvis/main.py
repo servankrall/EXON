@@ -54,6 +54,13 @@ def _ensure_packages():
     print("  (" + ", ".join(missing) + ")")
     print("  Bu yalnizca ILK acilista olur, birkac dakika surebilir.")
     print("=" * 60 + "\n")
+    # pip yoksa once ensurepip ile pip'i kur (Python ile gomulu gelir).
+    if not _installed("pip"):
+        print("  pip bulunamadi, Python icine gomulu ensurepip ile kuruluyor...")
+        try:
+            subprocess.run([sys.executable, "-m", "ensurepip", "--upgrade"])
+        except Exception:
+            pass
     subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
     subprocess.run([sys.executable, "-m", "pip", "install", *missing])
     # pywin32 (win32gui vb.) ayri ad; Windows'ta dene

@@ -58,6 +58,13 @@ if not defined PYTHON (
     pause & exit /b 1
 )
 
+:: ---- pip yoksa ensurepip ile onar ----
+"%PYTHON%" -m pip --version >nul 2>&1
+if errorlevel 1 (
+    echo   pip bulunamadi, onariliyor ^(ensurepip^)...
+    "%PYTHON%" -m ensurepip --upgrade
+)
+
 :: ---- Gerekli paketler (yalnizca ilk acilista) ----
 "%PYTHON%" -c "import google.genai, psutil, PIL, pygame, requests, bs4, pyaudio" >nul 2>&1
 if errorlevel 1 (
