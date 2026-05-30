@@ -60,17 +60,19 @@ Anahtarı [Google AI Studio](https://aistudio.google.com/apikey)'dan ücretsiz a
 
 ### 📦 Dağıtım — iki seçenek
 
-**A) Klasör + `run.bat` (kullanıcıda Python olmalı):** `jarvis` klasörünü ZIP'leyip
-gönderin; kullanıcı açıp `run.bat`'a çift tıklar, gerekenleri kendi kurar.
+**A) ZIP + `EXON_Baslat.bat` (önerilen — kullanıcı hiçbir şey kurmaz):**
+`jarvis` klasörünü ZIP'leyip gönderin. Kullanıcı açıp **`EXON_Baslat.bat`**'a çift tıklar.
+Bu başlatıcı, bilgisayarda **Python yoksa otomatik indirip kurar**, gerekli paketleri
+yükler ve uygulamayı açar — kullanıcının elle bir şey yapmasına gerek yoktur (yalnızca
+ilk açılış birkaç dakika sürer). PyInstaller'a / exe'ye gerek kalmadan "tek tık" deneyim.
 
-**B) Tek `.exe` (kullanıcıda Python GEREKMEZ — önerilen dağıtım):**
-`jarvis` klasöründe **`build_exe.bat`**'a çift tıklayın → `dist\EXON.exe` oluşur.
-Bu **tek dosyayı** paylaşırsınız; indiren kişi **hiçbir şey kurmadan** çift tıklayıp
-çalıştırır (Python, paketler ve tkinter exe'nin içine gömülüdür). Kullanıcı verisi
-(ayarlar, hafıza, görseller) exe'nin yanında **`EXON_data`** klasöründe tutulur.
+**B) Tek `.exe` (deneysel):** `jarvis` klasöründe **`build_exe.bat`** → önce `dist\EXON\`
+klasör modunu dener (en sağlam), olmazsa `dist\EXON.exe`. Oluşan klasörü/dosyayı paylaşın.
+Bazı bilgisayarlarda PyInstaller kararsız olabilir; o durumda **A yöntemini** kullanın.
 
 > Paketleme artıklarını (`build/`, `dist/`, `*.spec`, `__pycache__`) **`temizle.bat`**
-> ile temizleyebilirsiniz.
+> ile temizleyebilirsiniz. Kullanıcı verisi (ayarlar, hafıza, görseller) `EXON_data`
+> (exe modu) veya `jarvis` klasöründe tutulur.
 
 ---
 
