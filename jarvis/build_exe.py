@@ -102,17 +102,26 @@ if not result:
 
 # ── Sonuc ────────────────────────────────────────────────────────────────────
 print("\n" + "=" * 60)
-if result == "onedir":
-    print("  BASARILI (klasor modu)!")
-    print("  ->  dist\\EXON\\  klasorunun TAMAMINI paylas (zip'le).")
-    print("  Acan kisi icindeki EXON.exe'ye cift tiklar, Python GEREKMEZ.")
-elif result == "onefile":
-    print("  BASARILI (tek dosya)!  ->  dist\\EXON.exe")
-    print("  Bu tek dosyayi paylas; acan kisi Python KURMADAN calistirir.")
+if result in ("onedir", "onefile"):
+    out_dir = (HERE / "dist" / "EXON") if result == "onedir" else (HERE / "dist")
+    if result == "onedir":
+        print("  BASARILI (klasor modu)!")
+        print("  ->  dist\\EXON\\  klasorunun TAMAMINI zip'leyip paylas.")
+        print("  Acan kisi icindeki EXON.exe'ye cift tiklar; Python GEREKMEZ.")
+    else:
+        print("  BASARILI (tek dosya)!  ->  dist\\EXON.exe")
+        print("  Bu tek dosyayi paylas; acan kisi Python KURMADAN calistirir.")
+    print("  Kullanici verisi exe yanindaki 'EXON_data' klasorunde tutulur.")
+    # Sonuc klasorunu Explorer'da ac (kolaylik)
+    try:
+        if os.name == "nt":
+            os.startfile(str(out_dir))  # type: ignore[attr-defined]
+    except Exception:
+        pass
 else:
     print("  Iki mod da basarisiz oldu.")
-    print("  Bu makinede PyInstaller calismiyor olabilir. ALTERNATIF (kesin calisir):")
-    print("   - exe YERINE: klasoru zip'le, karsi taraf Python kurup run.bat'a tiklar.")
-    print("   - Ya da yukaridaki ilk 'ERROR' satirini bana yapistir.")
+    print("  ALTERNATIF (kesin calisir): exe yerine klasoru zip'le; karsi taraf")
+    print("  EXON_Baslat.bat'a tiklar (Python'u bile otomatik kurar).")
+    print("  Ya da yukaridaki ilk 'ERROR' satirini bana yapistir.")
 print("=" * 60)
 input("\n  ENTER ile kapat...")
