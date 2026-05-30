@@ -15,8 +15,59 @@ import time
 import array
 import math
 import urllib.parse
+import sys
+import subprocess
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+
+
+def _ensure_packages():
+    """Eksik 3. parti paketleri ayni Python yorumlayicisina otomatik kurar.
+    Boylece hangi baslatici kullanilirsa kullanilsin (yanlis pip'e kurulsa bile)
+    EXON kendini onarir. import_adi -> pip_adi."""
+    required = {
+        "requests": "requests",
+        "bs4": "beautifulsoup4",
+        "google.genai": "google-genai",
+        "psutil": "psutil",
+        "PIL": "Pillow",
+        "pygame": "pygame",
+        "pyttsx3": "pyttsx3",
+        "pyperclip": "pyperclip",
+        "pyautogui": "pyautogui",
+        "pygetwindow": "pygetwindow",
+    }
+    def _installed(mod: str) -> bool:
+        # find_spec namespace/alt-modullerde istisna firlatabilir; en saglami
+        # dogrudan import denemek.
+        try:
+            __import__(mod)
+            return True
+        except Exception:
+            return False
+
+    missing = [pip_name for mod, pip_name in required.items() if not _installed(mod)]
+    if not missing:
+        return
+    print("\n" + "=" * 60)
+    print("  EXON ilk kurulum: eksik paketler yukleniyor...")
+    print("  (" + ", ".join(missing) + ")")
+    print("  Bu yalnizca ILK acilista olur, birkac dakika surebilir.")
+    print("=" * 60 + "\n")
+    subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
+    subprocess.run([sys.executable, "-m", "pip", "install", *missing])
+    # pywin32 (win32gui vb.) ayri ad; Windows'ta dene
+    if os.name == "nt":
+        try:
+            import importlib.util as _u
+            if _u.find_spec("win32gui") is None:
+                subprocess.run([sys.executable, "-m", "pip", "install", "pywin32"])
+        except Exception:
+            pass
+
+
+_ensure_packages()
+
 import requests
 from bs4 import BeautifulSoup
 
