@@ -204,6 +204,14 @@ from actions.studio import compose_text, summarize_url, summarize_document
 from actions.dev_mode import record_tool, record_event, system_status_text
 from memory.smart_memory import (remember as smart_remember, cleanup_memory,
                                   build_user_profile, compress_memory_summary)
+from actions.security import (encrypt_memory, decrypt_memory, verify_integrity,
+                              snapshot_integrity, recover_json, security_report,
+                              read_security_log, log_security)
+from actions.analytics import (track_feature, usage_report, health_report,
+                               mark_session, CACHE)
+from actions.task_manager import (create_task, add_subtask, complete_subtask,
+                                  list_tasks, task_status, remove_task, task_history)
+from actions.verifier import review_answer, verify_against_sources
 from actions.license_manager import is_pro as _is_pro, PRO_TOOLS
 from actions.wake_word import WakeWordListener
 from actions.scheduler import TaskScheduler
@@ -1152,6 +1160,68 @@ TOOL_DECLARATIONS = [
             "'kendini kontrol et', 'geliştirici raporu' dediğinde kullan."
         ),
         "parameters": {"type": "OBJECT", "properties": {}}
+    },
+    {
+        "name": "security_action",
+        "description": (
+            "Güvenlik işlemleri. 'hafızamı şifrele' → encrypt (password gerekir), "
+            "'şifreli yedeği çöz' → decrypt, 'bütünlük kontrol et' → verify, "
+            "'güvenlik raporu' → report, 'güvenlik günlüğü' → log."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action":   {"type": "STRING", "description": "encrypt | decrypt | verify | snapshot | report | log"},
+                "password": {"type": "STRING", "description": "encrypt/decrypt için parola"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "system_health",
+        "description": "Sistem sağlık raporu (CPU/RAM/disk/pil) + EXON iç durumu. 'sistem sağlığı', 'bilgisayar durumu' dediğinde kullan.",
+        "parameters": {"type": "OBJECT", "properties": {}}
+    },
+    {
+        "name": "usage_analytics",
+        "description": "En çok kullanılan özellikler + oturum/önbellek istatistiği. 'kullanım raporu', 'neyi çok kullanıyorum' dediğinde kullan.",
+        "parameters": {"type": "OBJECT", "properties": {}}
+    },
+    {
+        "name": "manage_task",
+        "description": (
+            "Çok adımlı görev yönetimi. action: create (title+steps), list, status (task_id), "
+            "done (subtask_id), add (task_id+text), remove (task_id), history. "
+            "Kullanıcı uzun/çok adımlı bir iş planlamak istediğinde kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action":     {"type": "STRING", "description": "create | list | status | done | add | remove | history"},
+                "title":      {"type": "STRING", "description": "create için görev başlığı"},
+                "steps":      {"type": "STRING", "description": "create için virgülle ayrılmış alt adımlar"},
+                "priority":   {"type": "STRING", "description": "low | normal | high | urgent"},
+                "task_id":    {"type": "STRING", "description": "status/remove/add için görev id"},
+                "subtask_id": {"type": "STRING", "description": "done için alt adım id (örn. ab12.2)"},
+                "text":       {"type": "STRING", "description": "add için alt adım metni"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "verify_answer",
+        "description": (
+            "Bir metni/iddiayı öz-denetimden geçirir: güven puanı, çelişki ve belirsizlik "
+            "kontrolü. Kullanıcı 'bundan emin misin', 'doğrula', 'kontrol et' dediğinde kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "answer":  {"type": "STRING", "description": "Denetlenecek metin/iddia"},
+                "sources": {"type": "NUMBER", "description": "Varsa destekleyen kaynak sayısı"}
+            },
+            "required": ["answer"]
+        }
     }
 ]
 
@@ -1197,6 +1267,10 @@ def load_system_prompt() -> str:
         "kalıcı bilgi → save_memory.\n"
         "- 'Beni tanı'/'profilimi çıkar' → build_user_profile; 'hafızanı temizle' → cleanup_memory; "
         "'sistem durumu'/'kendini kontrol et' → system_status.\n"
+        "- 'Sistem sağlığı/bilgisayar durumu' → system_health; 'kullanım raporu' → usage_analytics; "
+        "güvenlik (şifrele/bütünlük/rapor) → security_action.\n"
+        "- Çok adımlı/uzun bir iş planlanırken → manage_task (create/list/done...). "
+        "Önemli bir iddiadan emin değilsen veya kullanıcı 'doğrula' derse → verify_answer.\n"
         "- Önemli bir kişisel bilgi (isim, tercih, proje, ilgi alanı) duyunca save_memory'yi sessizce çağır; "
         "önceki bilgiyle çelişki varsa kullanıcıya kibarca sor.\n"
         "ŞARKI: Kullanıcı şarkı isterse compose_song ile (tür/dil/ruh hali) söz üret; arkada ritim otomatik çalar. "
@@ -1914,6 +1988,62 @@ class ExonLive:
                 r = await loop.run_in_executor(None, system_status_text)
                 result = r or "Durum alınamadı."
 
+            elif name == "security_action":
+                act = str(args.get("action", "")).lower().strip()
+                pw = args.get("password", "")
+                if act == "encrypt":
+                    r = await loop.run_in_executor(None, lambda: encrypt_memory(pw))
+                elif act == "decrypt":
+                    r = await loop.run_in_executor(None, lambda: decrypt_memory(pw))
+                elif act in ("verify", "integrity"):
+                    r = await loop.run_in_executor(None, verify_integrity)
+                elif act == "snapshot":
+                    r = await loop.run_in_executor(None, snapshot_integrity)
+                elif act == "log":
+                    r = await loop.run_in_executor(None, lambda: read_security_log(20))
+                else:
+                    r = await loop.run_in_executor(None, security_report)
+                result = r or "Güvenlik işlemi tamamlandı."
+
+            elif name == "system_health":
+                r = await loop.run_in_executor(None, health_report)
+                result = r or "Sağlık raporu alınamadı."
+
+            elif name == "usage_analytics":
+                r = await loop.run_in_executor(None, lambda: usage_report(10))
+                result = r or "Kullanım verisi yok."
+
+            elif name == "manage_task":
+                act = str(args.get("action", "list")).lower().strip()
+                if act == "create":
+                    r = await loop.run_in_executor(
+                        None, lambda: create_task(args.get("title", ""),
+                                                  args.get("steps", ""),
+                                                  args.get("priority", "normal")))
+                elif act == "add":
+                    r = await loop.run_in_executor(
+                        None, lambda: add_subtask(args.get("task_id", ""), args.get("text", "")))
+                elif act == "done":
+                    r = await loop.run_in_executor(
+                        None, lambda: complete_subtask(args.get("subtask_id", "")))
+                elif act == "status":
+                    r = await loop.run_in_executor(
+                        None, lambda: task_status(args.get("task_id", "")))
+                elif act == "remove":
+                    r = await loop.run_in_executor(
+                        None, lambda: remove_task(args.get("task_id", "")))
+                elif act == "history":
+                    r = await loop.run_in_executor(None, lambda: task_history(10))
+                else:
+                    r = await loop.run_in_executor(None, lambda: list_tasks(True))
+                result = r or "Görev işlemi tamamlandı."
+
+            elif name == "verify_answer":
+                r = await loop.run_in_executor(
+                    None, lambda: review_answer(args.get("answer", ""),
+                                                int(args.get("sources", 0) or 0)))
+                result = r or "Denetim tamamlanamadı."
+
             else:
                 result = f"Bilinmeyen araç: {name}"
 
@@ -1924,9 +2054,10 @@ class ExonLive:
             self.speak_error(name, e)
 
         tool_failed = self._result_looks_like_error(result)
-        # Gelistirici modu: her arac cagrisini telemetriye kaydet.
+        # Gelistirici modu + analitik: her arac cagrisini kaydet.
         try:
             record_tool(name, ok=not tool_failed and not had_exception)
+            track_feature(name)
         except Exception:
             pass
         if tool_failed:
@@ -2127,6 +2258,13 @@ class ExonLive:
         if self._services_started:
             return
         self._services_started = True
+        # Analitik: oturum say + ilk acilista butunluk referansi al.
+        try:
+            mark_session()
+            snapshot_integrity()
+            log_security("EXON oturumu başlatıldı.")
+        except Exception:
+            pass
         try:
             self.scheduler.start()
             n = len(self.scheduler.list_tasks())
