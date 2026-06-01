@@ -35,6 +35,7 @@ PRO_TOOLS = {
     "search_in_code", "write_code_file", "set_performance_mode",
     "analyze_screen", "get_youtube_channel_report",
     "compose_text", "summarize_url", "summarize_document",
+    "learn_file", "learn_text", "knowledge_query", "knowledge_search",
 }
 
 PRO_FEATURES_TR = [

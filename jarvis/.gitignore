@@ -22,6 +22,10 @@ memory/phone_book.json
 generated_images/
 beats/
 screenshots/
+vectors/
+security/
+analytics.json
+memory/tasks.json
 faces/
 memory/scheduled_tasks.json
 wake/*.ppn

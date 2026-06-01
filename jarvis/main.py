@@ -212,6 +212,8 @@ from actions.analytics import (track_feature, usage_report, health_report,
 from actions.task_manager import (create_task, add_subtask, complete_subtask,
                                   list_tasks, task_status, remove_task, task_history)
 from actions.verifier import review_answer, verify_against_sources
+from actions.knowledge import (learn_text, learn_file, knowledge_search,
+                               knowledge_query, knowledge_stats)
 from actions.license_manager import is_pro as _is_pro, PRO_TOOLS
 from actions.wake_word import WakeWordListener
 from actions.scheduler import TaskScheduler
@@ -1222,6 +1224,68 @@ TOOL_DECLARATIONS = [
             },
             "required": ["answer"]
         }
+    },
+    {
+        "name": "learn_file",
+        "description": (
+            "Bir belgeyi/dosyayı (txt/md/kod/pdf) EXON'un kalıcı bilgi tabanına ekler "
+            "(RAG). Sonra 'knowledge_query' ile o belge hakkında soru sorabilirsin. "
+            "Kullanıcı 'şu dosyayı öğren', 'bunu hafızana al' dediğinde kullan. "
+            "collection: proje/konu adı (proje bazlı hafıza için)."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "path":       {"type": "STRING", "description": "Öğrenilecek dosyanın tam yolu"},
+                "collection": {"type": "STRING", "description": "Bilgi tabanı adı (proje/konu). Varsayılan 'default'."}
+            },
+            "required": ["path"]
+        }
+    },
+    {
+        "name": "learn_text",
+        "description": "Verilen bir metni bilgi tabanına ekler (RAG). Kullanıcı 'şunu öğren/aklında tut' diyip uzun bilgi verdiğinde kullan.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "text":       {"type": "STRING", "description": "Öğrenilecek metin"},
+                "collection": {"type": "STRING", "description": "Bilgi tabanı adı. Varsayılan 'default'."}
+            },
+            "required": ["text"]
+        }
+    },
+    {
+        "name": "knowledge_query",
+        "description": (
+            "Bilgi tabanına (önceden öğretilen belgelere) dayanarak KAYNAKLI yanıt verir "
+            "(RAG / semantik arama). Kullanıcı öğrettiği bir belge/proje hakkında soru "
+            "sorduğunda kullan. collection ile ilgili projeyi/konuyu seç."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "question":   {"type": "STRING", "description": "Bilgi tabanına sorulacak soru"},
+                "collection": {"type": "STRING", "description": "Hangi bilgi tabanı (proje/konu). Varsayılan 'default'."}
+            },
+            "required": ["question"]
+        }
+    },
+    {
+        "name": "knowledge_search",
+        "description": "Bilgi tabanında ham semantik arama (en yakın parçaları gösterir, yorumlamaz).",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "query":      {"type": "STRING", "description": "Aranacak ifade"},
+                "collection": {"type": "STRING", "description": "Bilgi tabanı adı. Varsayılan 'default'."}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "knowledge_stats",
+        "description": "Bilgi tabanı koleksiyonlarının durumunu (kaç parça) raporlar.",
+        "parameters": {"type": "OBJECT", "properties": {}}
     }
 ]
 
@@ -1271,6 +1335,10 @@ def load_system_prompt() -> str:
         "güvenlik (şifrele/bütünlük/rapor) → security_action.\n"
         "- Çok adımlı/uzun bir iş planlanırken → manage_task (create/list/done...). "
         "Önemli bir iddiadan emin değilsen veya kullanıcı 'doğrula' derse → verify_answer.\n"
+        "- BİLGİ TABANI (RAG): kullanıcı 'şu dosyayı/belgeyi öğren' derse learn_file, uzun bir "
+        "metni 'aklında tut' derse learn_text. Öğretilmiş bir belge/proje hakkında soru sorulursa "
+        "knowledge_query (kaynaklı yanıt). Farklı projeler için 'collection' adını ayır → proje "
+        "bazlı hafıza. Belge dışı uydurma yapma; knowledge_query 'belgede yok' derse onu ilet.\n"
         "- Önemli bir kişisel bilgi (isim, tercih, proje, ilgi alanı) duyunca save_memory'yi sessizce çağır; "
         "önceki bilgiyle çelişki varsa kullanıcıya kibarca sor.\n"
         "ŞARKI: Kullanıcı şarkı isterse compose_song ile (tür/dil/ruh hali) söz üret; arkada ritim otomatik çalar. "
@@ -2043,6 +2111,34 @@ class ExonLive:
                     None, lambda: review_answer(args.get("answer", ""),
                                                 int(args.get("sources", 0) or 0)))
                 result = r or "Denetim tamamlanamadı."
+
+            elif name == "learn_file":
+                r = await loop.run_in_executor(
+                    None, lambda: learn_file(args.get("path", ""),
+                                             args.get("collection", "default")))
+                result = r or "Dosya öğrenilemedi."
+
+            elif name == "learn_text":
+                r = await loop.run_in_executor(
+                    None, lambda: learn_text(args.get("text", ""),
+                                             args.get("collection", "default")))
+                result = r or "Metin öğrenilemedi."
+
+            elif name == "knowledge_query":
+                r = await loop.run_in_executor(
+                    None, lambda: knowledge_query(args.get("question", ""),
+                                                  args.get("collection", "default")))
+                result = r or "Yanıt üretilemedi."
+
+            elif name == "knowledge_search":
+                r = await loop.run_in_executor(
+                    None, lambda: knowledge_search(args.get("query", ""),
+                                                   args.get("collection", "default")))
+                result = r or "Sonuç bulunamadı."
+
+            elif name == "knowledge_stats":
+                r = await loop.run_in_executor(None, knowledge_stats)
+                result = r or "Bilgi tabanı durumu alınamadı."
 
             else:
                 result = f"Bilinmeyen araç: {name}"
