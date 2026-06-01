@@ -201,6 +201,9 @@ from actions.stocks import get_stock_price
 from actions.code_assistant import (read_code_file, list_code_files,
                                     search_in_code, write_code_file)
 from actions.studio import compose_text, summarize_url, summarize_document
+from actions.dev_mode import record_tool, record_event, system_status_text
+from memory.smart_memory import (remember as smart_remember, cleanup_memory,
+                                  build_user_profile, compress_memory_summary)
 from actions.license_manager import is_pro as _is_pro, PRO_TOOLS
 from actions.wake_word import WakeWordListener
 from actions.scheduler import TaskScheduler
@@ -1124,6 +1127,31 @@ TOOL_DECLARATIONS = [
             },
             "required": ["path"]
         }
+    },
+    {
+        "name": "build_user_profile",
+        "description": (
+            "Hafızadan otomatik kullanıcı profili + ilgi alanı analizi çıkarır. "
+            "Kullanıcı 'beni tanı', 'profilimi çıkar', 'hakkımda ne biliyorsun' dediğinde kullan."
+        ),
+        "parameters": {"type": "OBJECT", "properties": {}}
+    },
+    {
+        "name": "cleanup_memory",
+        "description": (
+            "Eski, düşük önemli ve az kullanılan hafıza kayıtlarını temizler "
+            "(önemli kimlik/kişi bilgileri korunur). Kullanıcı 'hafızanı temizle/düzenle' dediğinde kullan."
+        ),
+        "parameters": {"type": "OBJECT", "properties": {}}
+    },
+    {
+        "name": "system_status",
+        "description": (
+            "EXON'un iç durumunu raporlar (geliştirici modu): çalışma süresi, araç "
+            "çağrıları, hatalar, hafıza istatistiği. Kullanıcı 'sistem durumu', "
+            "'kendini kontrol et', 'geliştirici raporu' dediğinde kullan."
+        ),
+        "parameters": {"type": "OBJECT", "properties": {}}
     }
 ]
 
@@ -1167,6 +1195,10 @@ def load_system_prompt() -> str:
         "Belge/dosya özeti → summarize_document.\n"
         "- Tekrarlayan görev → add_scheduled_task; yüz tanıma → recognize_face; ekran → analyze_screen; "
         "kalıcı bilgi → save_memory.\n"
+        "- 'Beni tanı'/'profilimi çıkar' → build_user_profile; 'hafızanı temizle' → cleanup_memory; "
+        "'sistem durumu'/'kendini kontrol et' → system_status.\n"
+        "- Önemli bir kişisel bilgi (isim, tercih, proje, ilgi alanı) duyunca save_memory'yi sessizce çağır; "
+        "önceki bilgiyle çelişki varsa kullanıcıya kibarca sor.\n"
         "ŞARKI: Kullanıcı şarkı isterse compose_song ile (tür/dil/ruh hali) söz üret; arkada ritim otomatik çalar. "
         "Sözleri DÜZ OKUMA — melodiyle ve ruh haline göre tonla söyle (mutlu=canlı, hüzünlü=içten, rap=ritmik).\n"
         "Bazı özellikler (görsel, şarkı, kod, e-posta, borsa, haber, oyun modu, ekran analizi) EXON Pro'ya "
@@ -1552,9 +1584,17 @@ class ExonLive:
                 key = args.get("key", "")
                 val = args.get("value", "")
                 if key and val:
-                    update_memory({cat: {key: {"value": val}}})
-                    print(f"[Memory] 💾 {cat}/{key} = {val}")
-                result = "ok"
+                    # Gelismis hafiza: onem puani + cakisma tespiti.
+                    res = await loop.run_in_executor(
+                        None, lambda: smart_remember(cat, key, val))
+                    print(f"[Memory] 💾 {cat}/{key} = {val} (onem {res.get('importance')})")
+                    if res.get("conflicts"):
+                        result = ("Kaydedildi. Not: önceki bilgiyle çelişki var — "
+                                  + "; ".join(res["conflicts"]))
+                    else:
+                        result = "ok"
+                else:
+                    result = "ok"
 
             elif name == "delete_memory":
                 result = delete_memory(
@@ -1862,6 +1902,18 @@ class ExonLive:
                         args.get("path", ""), args.get("language", "tr")))
                 result = r or "Özet çıkarılamadı."
 
+            elif name == "build_user_profile":
+                r = await loop.run_in_executor(None, build_user_profile)
+                result = r or "Profil oluşturulamadı."
+
+            elif name == "cleanup_memory":
+                r = await loop.run_in_executor(None, lambda: cleanup_memory())
+                result = r or "Hafıza temizliği tamamlandı."
+
+            elif name == "system_status":
+                r = await loop.run_in_executor(None, system_status_text)
+                result = r or "Durum alınamadı."
+
             else:
                 result = f"Bilinmeyen araç: {name}"
 
@@ -1872,6 +1924,11 @@ class ExonLive:
             self.speak_error(name, e)
 
         tool_failed = self._result_looks_like_error(result)
+        # Gelistirici modu: her arac cagrisini telemetriye kaydet.
+        try:
+            record_tool(name, ok=not tool_failed and not had_exception)
+        except Exception:
+            pass
         if tool_failed:
             if not had_exception:
                 self.ui.set_state("ERROR")
