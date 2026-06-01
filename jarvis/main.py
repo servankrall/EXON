@@ -215,6 +215,8 @@ from actions.verifier import review_answer, verify_against_sources
 from actions.knowledge import (learn_text, learn_file, knowledge_search,
                                knowledge_query, knowledge_stats)
 from actions.self_improve import self_audit
+from actions.git_tools import git_action, suggest_commit_message
+from actions.research import search_academic, resolve_doi
 from actions.license_manager import is_pro as _is_pro, PRO_TOOLS
 from actions.wake_word import WakeWordListener
 from actions.scheduler import TaskScheduler
@@ -1296,6 +1298,60 @@ TOOL_DECLARATIONS = [
             "geliştir', 'kendini denetle', 'sistem analizi yap' dediğinde kullan."
         ),
         "parameters": {"type": "OBJECT", "properties": {}}
+    },
+    {
+        "name": "git_action",
+        "description": (
+            "Git deposunda işlem yapar: status, log, diff, branch, current, add, commit "
+            "(message gerekir), create_branch/switch (name gerekir), pull. Kullanıcı bir "
+            "kod projesinde git işlemi isterse kullan. Tehlikeli işlemler (force/reset) yapılmaz."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action":  {"type": "STRING", "description": "status|log|diff|branch|current|add|commit|create_branch|switch|pull"},
+                "path":    {"type": "STRING", "description": "Depo klasörü yolu (varsayılan geçerli klasör)"},
+                "message": {"type": "STRING", "description": "commit için mesaj"},
+                "name":    {"type": "STRING", "description": "create_branch/switch için dal adı"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "suggest_commit_message",
+        "description": "Git değişikliklerine bakıp uygun bir commit mesajı önerir.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "path": {"type": "STRING", "description": "Depo klasörü yolu"}
+            }
+        }
+    },
+    {
+        "name": "search_academic",
+        "description": (
+            "Akademik/bilimsel makale arar (arXiv). Kullanıcı bir konuda araştırma, "
+            "makale, bilimsel kaynak istediğinde kullan. Başlık, yazar, yıl, özet, link verir."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "query": {"type": "STRING", "description": "Araştırma konusu/sorgusu (İngilizce daha iyi)"},
+                "limit": {"type": "NUMBER", "description": "Kaç makale (varsayılan 5)"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "resolve_doi",
+        "description": "Bir DOI'yi çözer: makale künyesi, dergi, atıf sayısı ve kaynak güvenilirlik puanı.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "doi": {"type": "STRING", "description": "DOI (örn. 10.1038/nature12373)"}
+            },
+            "required": ["doi"]
+        }
     }
 ]
 
@@ -1349,6 +1405,9 @@ def load_system_prompt() -> str:
         "metni 'aklında tut' derse learn_text. Öğretilmiş bir belge/proje hakkında soru sorulursa "
         "knowledge_query (kaynaklı yanıt). Farklı projeler için 'collection' adını ayır → proje "
         "bazlı hafıza. Belge dışı uydurma yapma; knowledge_query 'belgede yok' derse onu ilet.\n"
+        "- GIT: kod projesinde durum/commit/dal işlemleri → git_action; commit mesajı önerisi → "
+        "suggest_commit_message. Akademik makale → search_academic; DOI künyesi → resolve_doi.\n"
+        "- 'Kendini geliştir/denetle' → self_audit (EXON kendi sistemini analiz eder).\n"
         "- Önemli bir kişisel bilgi (isim, tercih, proje, ilgi alanı) duyunca save_memory'yi sessizce çağır; "
         "önceki bilgiyle çelişki varsa kullanıcıya kibarca sor.\n"
         "ŞARKI: Kullanıcı şarkı isterse compose_song ile (tür/dil/ruh hali) söz üret; arkada ritim otomatik çalar. "
@@ -2153,6 +2212,30 @@ class ExonLive:
             elif name == "self_audit":
                 r = await loop.run_in_executor(None, self_audit)
                 result = r or "Denetim yapılamadı."
+
+            elif name == "git_action":
+                r = await loop.run_in_executor(
+                    None, lambda: git_action(args.get("action", "status"),
+                                             args.get("path", "."),
+                                             args.get("message", ""),
+                                             args.get("name", "")))
+                result = r or "Git işlemi tamamlandı."
+
+            elif name == "suggest_commit_message":
+                r = await loop.run_in_executor(
+                    None, lambda: suggest_commit_message(args.get("path", ".")))
+                result = r or "Öneri üretilemedi."
+
+            elif name == "search_academic":
+                r = await loop.run_in_executor(
+                    None, lambda: search_academic(args.get("query", ""),
+                                                  int(args.get("limit", 5) or 5)))
+                result = r or "Makale bulunamadı."
+
+            elif name == "resolve_doi":
+                r = await loop.run_in_executor(
+                    None, lambda: resolve_doi(args.get("doi", "")))
+                result = r or "DOI çözülemedi."
 
             else:
                 result = f"Bilinmeyen araç: {name}"
