@@ -214,6 +214,7 @@ from actions.task_manager import (create_task, add_subtask, complete_subtask,
 from actions.verifier import review_answer, verify_against_sources
 from actions.knowledge import (learn_text, learn_file, knowledge_search,
                                knowledge_query, knowledge_stats)
+from actions.self_improve import self_audit
 from actions.license_manager import is_pro as _is_pro, PRO_TOOLS
 from actions.wake_word import WakeWordListener
 from actions.scheduler import TaskScheduler
@@ -1286,6 +1287,15 @@ TOOL_DECLARATIONS = [
         "name": "knowledge_stats",
         "description": "Bilgi tabanı koleksiyonlarının durumunu (kaç parça) raporlar.",
         "parameters": {"type": "OBJECT", "properties": {}}
+    },
+    {
+        "name": "self_audit",
+        "description": (
+            "'EXON'u geliştir' denetim modu: EXON kendi kodunu, araçlarını, hafızasını "
+            "ve durumunu analiz edip geliştirme önerileri üretir. Kullanıcı 'kendini "
+            "geliştir', 'kendini denetle', 'sistem analizi yap' dediğinde kullan."
+        ),
+        "parameters": {"type": "OBJECT", "properties": {}}
     }
 ]
 
@@ -2139,6 +2149,10 @@ class ExonLive:
             elif name == "knowledge_stats":
                 r = await loop.run_in_executor(None, knowledge_stats)
                 result = r or "Bilgi tabanı durumu alınamadı."
+
+            elif name == "self_audit":
+                r = await loop.run_in_executor(None, self_audit)
+                result = r or "Denetim yapılamadı."
 
             else:
                 result = f"Bilinmeyen araç: {name}"
