@@ -123,3 +123,77 @@ def self_audit() -> str:
         lines.append(f"  {i}. {s}")
 
     return "\n".join(lines)
+
+
+def optimize_self() -> str:
+    """Kendini optimize eden cekirdek: kullanim verisine bakip somut, onceliklendirilmis
+    iyilestirme/optimizasyon onerileri uretir ('bir sonraki gelistirme ne olmali')."""
+    lines = ["[EXON KENDİNİ OPTİMİZE ETME RAPORU]", ""]
+    recs = []
+
+    # 1) Kullanim analitigi: az/cok kullanilan araclar
+    try:
+        from actions.analytics import _load as _aload
+        data = _aload()
+        feats = data.get("features", {})
+        if feats:
+            ranked = sorted(feats.items(), key=lambda kv: -kv[1])
+            top = ", ".join(f"{n}({c})" for n, c in ranked[:5])
+            lines.append(f"• En çok kullanılan: {top}")
+            rare = [n for n, c in ranked if c <= 1]
+            if len(rare) > 8:
+                recs.append(f"{len(rare)} araç neredeyse hiç kullanılmıyor — "
+                            "menü/öneri sadeleştirilebilir.")
+            lines.append(f"• Toplam {len(feats)} farklı araç kullanılmış.")
+        else:
+            lines.append("• Henüz kullanım verisi yok (daha çok kullanınca öneriler keskinleşir).")
+    except Exception:
+        pass
+
+    # 2) Hata orani
+    try:
+        from actions.dev_mode import snapshot
+        snap = snapshot()
+        if snap["tool_calls"]:
+            rate = snap["errors"] / snap["tool_calls"] * 100
+            lines.append(f"• Bu oturum hata oranı: %{rate:.0f}")
+            if rate > 10:
+                recs.append("Hata oranı yüksek — en çok hata veren aracı gözden geçir.")
+    except Exception:
+        pass
+
+    # 3) Hafiza/bilgi tabani buyumesi
+    try:
+        from memory.smart_memory import memory_stats
+        ms = memory_stats()
+        if ms["total"] > 150:
+            recs.append("Hafıza büyük — 'cleanup_memory' ile düşük önemli kayıtları buda.")
+    except Exception:
+        pass
+
+    # 4) Eksik opsiyonel yetenekler
+    optional = {"cv2": "yüz tanıma + video analizi", "pypdf": "PDF okuma/RAG",
+                "pyaudio": "sesli giriş"}
+    missing = [f"{m} ({w})" for m, w in optional.items()
+               if not _safe_import(m)]
+    if missing:
+        recs.append("Şu paketler kurulursa yeni yetenekler açılır: " + ", ".join(missing))
+
+    # 5) Bir sonraki gelistirme onerisi (sezgisel oncelik)
+    lines.append("")
+    lines.append("BİR SONRAKİ GELİŞTİRME ÖNERİLERİ (öncelik sırası):")
+    if not recs:
+        recs.append("Sistem dengeli görünüyor. Düzenli 'backup_data cloud' ile yedek al.")
+    recs.append("Sık kullandığın işler için 'plugins/' altında kendi eklentini yaz.")
+    recs.append("Önemli belgeleri 'learn_file' ile bilgi tabanına ekle (RAG gücü artar).")
+    for i, r in enumerate(recs, 1):
+        lines.append(f"  {i}. {r}")
+    return "\n".join(lines)
+
+
+def _safe_import(mod: str) -> bool:
+    try:
+        __import__(mod)
+        return True
+    except Exception:
+        return False

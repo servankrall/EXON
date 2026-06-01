@@ -424,6 +424,7 @@ class ExonUI:
         self.on_voice_change = None
         self.on_effects_state_change = None
         self.on_image_uploaded = None
+        self.on_emotion_toggle = None
 
         self._current_voice = self._load_voice()
 
@@ -1246,17 +1247,25 @@ class ExonUI:
             p["y"] %= self.H
 
     def _build_input_bar(self, lw: int):
-        x0    = self.CHAT_X
-        btn_w = 76
-        gap   = 8
-        inp_w = lw - btn_w - gap
+        x0      = self.CHAT_X
+        btn_w   = 76
+        plus_w  = 34
+        gap     = 8
+        inp_w   = lw - btn_w - plus_w - gap * 2
+        # Sol: "+" duygu modu butonu
+        self._plus_btn = tk.Button(
+            self.root, text="✛", command=self._toggle_emotion_mode,
+            fg=C_CYAN, bg=C_PANEL, activeforeground=C_BG, activebackground=C_CYAN,
+            font=font_body_bold(15), borderwidth=0, cursor="hand2",
+            highlightthickness=1, highlightbackground=C_MID)
+        self._plus_btn.place(x=x0, y=self.CHAT_INPUT_Y, width=plus_w, height=INPUT_H)
         self._input_var   = tk.StringVar()
         self._input_entry = tk.Entry(
             self.root, textvariable=self._input_var,
             fg=C_TEXT, bg="#081426", insertbackground=C_TEXT,
             borderwidth=0, font=font_body(11),
             highlightthickness=1, highlightbackground=C_DIM, highlightcolor=C_PRI)
-        self._input_entry.place(x=x0, y=self.CHAT_INPUT_Y, width=inp_w, height=INPUT_H)
+        self._input_entry.place(x=x0+plus_w+gap, y=self.CHAT_INPUT_Y, width=inp_w, height=INPUT_H)
         self._input_entry.bind("<Return>",   self._on_input_submit)
         self._input_entry.bind("<KP_Enter>", self._on_input_submit)
         self._send_btn = tk.Button(
@@ -1264,8 +1273,42 @@ class ExonUI:
             fg=C_ORG, bg=C_PANEL, activeforeground=C_BG, activebackground=C_ORG,
             font=font_body_bold(10), borderwidth=0, cursor="hand2",
             highlightthickness=1, highlightbackground=C_ORG)
-        self._send_btn.place(x=x0+inp_w+gap, y=self.CHAT_INPUT_Y,
+        self._send_btn.place(x=x0+plus_w+gap+inp_w+gap, y=self.CHAT_INPUT_Y,
                              width=btn_w, height=INPUT_H)
+        self._draw_plus_button()
+
+    def _draw_plus_button(self):
+        """Duygu modu durumuna gore + butonunun gorunumunu gunceller."""
+        try:
+            from actions.emotion import ENGINE
+            on = ENGINE.is_enabled()
+            cur = ENGINE.current()
+        except Exception:
+            on, cur = False, {"emoji": ""}
+        if on:
+            self._plus_btn.configure(text=cur.get("emoji", "❤") or "❤",
+                                     fg=C_BG, bg=C_GOLD, highlightbackground=C_GOLD)
+        else:
+            self._plus_btn.configure(text="✛", fg=C_CYAN, bg=C_PANEL,
+                                     highlightbackground=C_MID)
+
+    def _toggle_emotion_mode(self):
+        """'+' butonu: Duygu Modu'nu açar/kapatır."""
+        try:
+            from actions.emotion import ENGINE
+            now = ENGINE.toggle()
+        except Exception as exc:
+            self.write_log(f"ERR: Duygu modu açılamadı — {exc}")
+            return
+        self._draw_plus_button()
+        if now:
+            self.write_log("SYS: ❤ Duygu Modu AÇILDI — EXON artık duygularını yansıtacak.")
+            if self.on_emotion_toggle:
+                threading.Thread(target=self.on_emotion_toggle, args=(True,), daemon=True).start()
+        else:
+            self.write_log("SYS: Duygu Modu kapatıldı.")
+            if self.on_emotion_toggle:
+                threading.Thread(target=self.on_emotion_toggle, args=(False,), daemon=True).start()
 
     def _place_layout_widgets(self):
         self.log_frame.place(x=self.CHAT_X, y=self.CHAT_Y,
@@ -1320,11 +1363,14 @@ class ExonUI:
             self._settings_body.place_forget()
             self._debug_body.place_forget()
 
-        inp_w = self.CHAT_W - 84
-        self._input_entry.place(x=self.CHAT_X, y=self.CHAT_INPUT_Y,
+        plus_w, gap, btn_w = 34, 8, 76
+        inp_w = self.CHAT_W - btn_w - plus_w - gap * 2
+        self._plus_btn.place(x=self.CHAT_X, y=self.CHAT_INPUT_Y,
+                             width=plus_w, height=INPUT_H)
+        self._input_entry.place(x=self.CHAT_X + plus_w + gap, y=self.CHAT_INPUT_Y,
                                 width=inp_w, height=INPUT_H)
-        self._send_btn.place(x=self.CHAT_X + inp_w + 8, y=self.CHAT_INPUT_Y,
-                             width=76, height=INPUT_H)
+        self._send_btn.place(x=self.CHAT_X + plus_w + gap + inp_w + gap, y=self.CHAT_INPUT_Y,
+                             width=btn_w, height=INPUT_H)
 
         if hasattr(self, "_pro_canvas"):
             self._pro_canvas.place(x=geo["btn_x"] + geo["btn_w"] + 10, y=geo["btn_y"] + 6)
@@ -1569,7 +1615,21 @@ class ExonUI:
 
     def _orb_rgb(self):
         state = "PAUSED" if self.paused else self._jarvis_state
-        return ORB_COLORS.get(state, ORB_COLORS["LISTENING"])
+        base = ORB_COLORS.get(state, ORB_COLORS["LISTENING"])
+        # Duygu modu açıksa ve aktif bir his varsa, orb/yüz rengini ona doğru kaydır.
+        if state not in ("PAUSED", "ERROR"):
+            try:
+                from actions.emotion import ENGINE
+                cur = ENGINE.current()
+                if cur["enabled"] and cur["emotion"] != "notr" and cur["intensity"] > 0.12:
+                    er, eg, eb = cur["rgb"]
+                    w = min(0.7, cur["intensity"])  # his rengine karışım oranı
+                    return (int(base[0]*(1-w) + er*w),
+                            int(base[1]*(1-w) + eg*w),
+                            int(base[2]*(1-w) + eb*w))
+            except Exception:
+                pass
+        return base
 
     @staticmethod
     def _split_summary_lines(text: str, limit: int = 4) -> list[str]:

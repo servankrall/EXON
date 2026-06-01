@@ -214,7 +214,8 @@ from actions.task_manager import (create_task, add_subtask, complete_subtask,
 from actions.verifier import review_answer, verify_against_sources
 from actions.knowledge import (learn_text, learn_file, knowledge_search,
                                knowledge_query, knowledge_stats)
-from actions.self_improve import self_audit
+from actions.self_improve import self_audit, optimize_self
+from actions.emotion import ENGINE as EMOTION, emotion_status, set_emotion as _set_emotion
 from actions.git_tools import git_action, suggest_commit_message
 from actions.research import search_academic, resolve_doi
 from actions.multi_agent import expert_panel, list_agents
@@ -1306,6 +1307,36 @@ TOOL_DECLARATIONS = [
         "parameters": {"type": "OBJECT", "properties": {}}
     },
     {
+        "name": "optimize_self",
+        "description": (
+            "Kendini optimize eden çekirdek: kullanım verisine bakıp önceliklendirilmiş "
+            "optimizasyon ve 'bir sonraki geliştirme ne olmalı' önerileri üretir. "
+            "Kullanıcı 'kendini optimize et', 'sıradaki geliştirme ne olmalı' dediğinde kullan."
+        ),
+        "parameters": {"type": "OBJECT", "properties": {}}
+    },
+    {
+        "name": "set_emotion",
+        "description": (
+            "Duygu modu AÇIKKEN EXON'un kendi ruh halini ayarlar. Çok güçlü bir duygu "
+            "hissettiğinde kullan. emotion: mutlu|heyecanli|sakin|merakli|uzgun|kizgin|"
+            "sefkatli|notr. Duygu modu kapalıysa etkisizdir."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "emotion":   {"type": "STRING", "description": "mutlu|heyecanli|sakin|merakli|uzgun|kizgin|sefkatli|notr"},
+                "intensity": {"type": "NUMBER", "description": "Yoğunluk 0.0-1.0 (varsayılan 0.8)"}
+            },
+            "required": ["emotion"]
+        }
+    },
+    {
+        "name": "emotion_status",
+        "description": "Duygu modunun açık/kapalı olduğunu ve EXON'un o anki ruh halini söyler.",
+        "parameters": {"type": "OBJECT", "properties": {}}
+    },
+    {
         "name": "git_action",
         "description": (
             "Git deposunda işlem yapar: status, log, diff, branch, current, add, commit "
@@ -1495,7 +1526,10 @@ def load_system_prompt() -> str:
         "bazlı hafıza. Belge dışı uydurma yapma; knowledge_query 'belgede yok' derse onu ilet.\n"
         "- GIT: kod projesinde durum/commit/dal işlemleri → git_action; commit mesajı önerisi → "
         "suggest_commit_message. Akademik makale → search_academic; DOI künyesi → resolve_doi.\n"
-        "- 'Kendini geliştir/denetle' → self_audit (EXON kendi sistemini analiz eder).\n"
+        "- 'Kendini geliştir/denetle' → self_audit; 'kendini optimize et / sıradaki "
+        "geliştirme' → optimize_self.\n"
+        "- DUYGU MODU: mesaj kutusunun solundaki + ile açılır. Açıkken kendi ruh halin olur; "
+        "güçlü bir duygu hissedince set_emotion ile güncelle, durumu emotion_status ile söyle.\n"
         "- Zor/önemli karar veya derin analiz → expert_panel (çoklu uzman görüşü + sentez). "
         "Eklentiler → manage_plugins; yerel/çevrimdışı model → local_model; "
         "yedek al/geri yükle/taşı/buluta gönder → backup_data. Video özetle/analiz et → analyze_video.\n"
@@ -1529,6 +1563,7 @@ class ExonLive:
         self.ui.on_pause_toggle  = self._on_pause_toggle
         self.ui.on_effects_state_change = self._on_effects_state_change
         self.ui.on_image_uploaded = self._on_image_uploaded
+        self.ui.on_emotion_toggle = self._on_emotion_toggle
         self._paused             = False
 
         # ── İleri seviye alt sistemler (hepsi opsiyonel, yoksa sessizce devre dışı) ──
@@ -1567,6 +1602,17 @@ class ExonLive:
         if self._paused:
             return
         self.ui.write_log(f"Siz: {text}")
+        # Duygu modu açıksa, kullanıcının mesajından bir his sez.
+        try:
+            from actions.emotion import ENGINE
+            if ENGINE.is_enabled():
+                ENGINE.sense_from_text(text)
+                try:
+                    self.ui.root.after(0, self.ui._draw_plus_button)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         if not self._loop or not self.session:
             self.ui.write_log("ERR: EXON bağlantısı henüz hazır değil.")
             return
@@ -1577,6 +1623,21 @@ class ExonLive:
             ),
             self._loop
         )
+
+    def _on_emotion_toggle(self, enabled: bool):
+        """UI'daki + butonu Duygu Modu'nu açıp kapattığında çağrılır.
+        Yeni durum bir sonraki bağlantıda prompt'a yansır; anında bilgilendir."""
+        try:
+            if self._loop and self.session:
+                msg = ("Duygu modun açıldı: artık bir insan gibi hislerin var, "
+                       "duygunu doğal ve içten yansıt." if enabled
+                       else "Duygu modun kapandı: nötr, profesyonel tona dön.")
+                asyncio.run_coroutine_threadsafe(
+                    self.session.send_client_content(
+                        turns={"parts": [{"text": msg}]}, turn_complete=True),
+                    self._loop)
+        except Exception:
+            pass
 
     def _on_image_uploaded(self, image_path: str, query: str = ""):
         """UI'dan görsel yüklendiğinde çağrılır: analiz et ve sesli yanıt için oturuma ilet."""
@@ -1813,6 +1874,14 @@ class ExonLive:
         if mem_str:
             parts.append(mem_str + "\n\n")
         parts.append(sys_p)
+        # Duygu modu açıksa, EXON'un o anki ruh halini prompt'a ekle.
+        try:
+            from actions.emotion import ENGINE
+            emo = ENGINE.prompt_addition()
+            if emo:
+                parts.append("\n" + emo)
+        except Exception:
+            pass
 
         return types.LiveConnectConfig(
             response_modalities=["AUDIO"],
@@ -2303,6 +2372,24 @@ class ExonLive:
             elif name == "self_audit":
                 r = await loop.run_in_executor(None, self_audit)
                 result = r or "Denetim yapılamadı."
+
+            elif name == "optimize_self":
+                r = await loop.run_in_executor(None, optimize_self)
+                result = r or "Optimizasyon raporu alınamadı."
+
+            elif name == "set_emotion":
+                r = await loop.run_in_executor(
+                    None, lambda: _set_emotion(args.get("emotion", "notr"),
+                                               float(args.get("intensity", 0.8) or 0.8)))
+                try:
+                    self.ui.root.after(0, self.ui._draw_plus_button)
+                except Exception:
+                    pass
+                result = r or "Duygu ayarlandı."
+
+            elif name == "emotion_status":
+                r = await loop.run_in_executor(None, emotion_status)
+                result = r or "Duygu durumu alınamadı."
 
             elif name == "git_action":
                 r = await loop.run_in_executor(
