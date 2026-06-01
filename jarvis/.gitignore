@@ -24,6 +24,8 @@ beats/
 screenshots/
 vectors/
 security/
+backups/
+plugins/
 analytics.json
 memory/tasks.json
 faces/

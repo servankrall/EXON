@@ -217,6 +217,10 @@ from actions.knowledge import (learn_text, learn_file, knowledge_search,
 from actions.self_improve import self_audit
 from actions.git_tools import git_action, suggest_commit_message
 from actions.research import search_academic, resolve_doi
+from actions.multi_agent import expert_panel, list_agents
+from actions.plugin_system import (load_plugins, list_plugins, run_plugin, toggle_plugin)
+from actions.local_llm import list_local_models, local_generate
+from actions.backup import create_backup, list_backups, restore_backup
 from actions.license_manager import is_pro as _is_pro, PRO_TOOLS
 from actions.wake_word import WakeWordListener
 from actions.scheduler import TaskScheduler
@@ -1352,6 +1356,69 @@ TOOL_DECLARATIONS = [
             },
             "required": ["doi"]
         }
+    },
+    {
+        "name": "expert_panel",
+        "description": (
+            "Çoklu ajan: bir soruyu birden çok uzman bakış açısıyla (araştırmacı, "
+            "eleştirmen, planlamacı, mimar, kalite) inceleyip sentezler. Kullanıcı "
+            "zor/önemli bir karar, derin analiz veya 'farklı açılardan değerlendir' istediğinde kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "question": {"type": "STRING", "description": "İncelenecek soru/konu"},
+                "roles":    {"type": "STRING", "description": "İstenen roller (boşlukla): arastirmaci elestirmen planlamaci mimar kalite. Boşsa varsayılan panel."}
+            },
+            "required": ["question"]
+        }
+    },
+    {
+        "name": "manage_plugins",
+        "description": (
+            "Eklenti yönetimi. action: list (eklentileri listele), reload (yeniden yükle), "
+            "run (name+arg ile çalıştır), enable/disable (name). plugins/ klasöründeki .py eklentileri."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "list | reload | run | enable | disable"},
+                "name":   {"type": "STRING", "description": "Eklenti adı (run/enable/disable için)"},
+                "arg":    {"type": "STRING", "description": "run için eklentiye verilecek argüman"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "local_model",
+        "description": (
+            "Yerel LLM (Ollama, çevrimdışı/ücretsiz). action: list (kurulu modeller), "
+            "generate (prompt ile yerel modelden yanıt). Ollama kuruluysa çalışır."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "list | generate"},
+                "prompt": {"type": "STRING", "description": "generate için istem"},
+                "model":  {"type": "STRING", "description": "Model adı (opsiyonel, örn. llama3.2)"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "backup_data",
+        "description": (
+            "Yedekleme/taşıma. action: create (tüm veriyi zip'e al), list (yedekleri "
+            "listele), restore (filename ile geri yükle). Ayarlar+hafıza+bilgi tabanı dahil."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action":   {"type": "STRING", "description": "create | list | restore"},
+                "filename": {"type": "STRING", "description": "restore için yedek dosya adı (boşsa en yenisi)"}
+            },
+            "required": ["action"]
+        }
     }
 ]
 
@@ -1408,6 +1475,9 @@ def load_system_prompt() -> str:
         "- GIT: kod projesinde durum/commit/dal işlemleri → git_action; commit mesajı önerisi → "
         "suggest_commit_message. Akademik makale → search_academic; DOI künyesi → resolve_doi.\n"
         "- 'Kendini geliştir/denetle' → self_audit (EXON kendi sistemini analiz eder).\n"
+        "- Zor/önemli karar veya derin analiz → expert_panel (çoklu uzman görüşü + sentez). "
+        "Eklentiler → manage_plugins; yerel/çevrimdışı model → local_model; "
+        "yedek al/geri yükle/taşı → backup_data.\n"
         "- Önemli bir kişisel bilgi (isim, tercih, proje, ilgi alanı) duyunca save_memory'yi sessizce çağır; "
         "önceki bilgiyle çelişki varsa kullanıcıya kibarca sor.\n"
         "ŞARKI: Kullanıcı şarkı isterse compose_song ile (tür/dil/ruh hali) söz üret; arkada ritim otomatik çalar. "
@@ -2236,6 +2306,46 @@ class ExonLive:
                 r = await loop.run_in_executor(
                     None, lambda: resolve_doi(args.get("doi", "")))
                 result = r or "DOI çözülemedi."
+
+            elif name == "expert_panel":
+                r = await loop.run_in_executor(
+                    None, lambda: expert_panel(args.get("question", ""),
+                                               args.get("roles", "")))
+                result = r or "Panel sonucu alınamadı."
+
+            elif name == "manage_plugins":
+                act = str(args.get("action", "list")).lower().strip()
+                if act == "reload":
+                    r = await loop.run_in_executor(None, load_plugins)
+                elif act == "run":
+                    r = await loop.run_in_executor(
+                        None, lambda: run_plugin(args.get("name", ""), args.get("arg", "")))
+                elif act in ("enable", "disable"):
+                    r = await loop.run_in_executor(
+                        None, lambda: toggle_plugin(args.get("name", ""), act == "enable"))
+                else:
+                    r = await loop.run_in_executor(None, list_plugins)
+                result = r or "Eklenti işlemi tamamlandı."
+
+            elif name == "local_model":
+                act = str(args.get("action", "list")).lower().strip()
+                if act == "generate":
+                    r = await loop.run_in_executor(
+                        None, lambda: local_generate(args.get("prompt", ""), args.get("model", "")))
+                else:
+                    r = await loop.run_in_executor(None, list_local_models)
+                result = r or "Yerel model işlemi tamamlandı."
+
+            elif name == "backup_data":
+                act = str(args.get("action", "create")).lower().strip()
+                if act == "list":
+                    r = await loop.run_in_executor(None, list_backups)
+                elif act == "restore":
+                    r = await loop.run_in_executor(
+                        None, lambda: restore_backup(args.get("filename", "")))
+                else:
+                    r = await loop.run_in_executor(None, create_backup)
+                result = r or "Yedekleme işlemi tamamlandı."
 
             else:
                 result = f"Bilinmeyen araç: {name}"
