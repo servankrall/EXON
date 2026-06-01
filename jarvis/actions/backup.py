@@ -9,11 +9,14 @@ Sadece stdlib (zipfile). Gercek bulut degil ama tasinabilir ve kesin calisir.
 
 from __future__ import annotations
 
+import os
+import shutil
 import time
 import zipfile
 from pathlib import Path
 
 from paths import DATA_DIR
+from app_config import get_app_config_value, save_app_config
 
 _BACKUP_DIR = DATA_DIR / "backups"
 
@@ -91,3 +94,75 @@ def restore_backup(filename: str = "") -> str:
                 "(Önceki durumun güvenlik yedeği de alındı.)")
     except Exception as exc:
         return f"Geri yükleme başarısız: {exc}"
+
+
+# ── Bulut klasor senkronizasyonu (OneDrive/Drive/Dropbox) ────────────────────
+def _detect_cloud_dirs() -> list[Path]:
+    """Bilgisayardaki bilinen bulut senkron klasorlerini bulur."""
+    home = Path.home()
+    candidates = [
+        Path(os.environ.get("OneDrive", "")) if os.environ.get("OneDrive") else None,
+        Path(os.environ.get("OneDriveConsumer", "")) if os.environ.get("OneDriveConsumer") else None,
+        home / "OneDrive",
+        home / "Google Drive",
+        home / "GoogleDrive",
+        home / "My Drive",
+        home / "Dropbox",
+        home / "iCloudDrive",
+    ]
+    found = []
+    for c in candidates:
+        if c and c.exists() and c.is_dir() and c not in found:
+            found.append(c)
+    return found
+
+
+def cloud_sync(target_dir: str = "") -> str:
+    """En son yedegi bir bulut klasorune (OneDrive/Drive/Dropbox) kopyalar.
+    target_dir verilirse oraya; verilmezse otomatik bulunan ilk bulut klasorune."""
+    # Once guncel yedek al
+    create_backup()
+    backups = sorted(_BACKUP_DIR.glob("exon_yedek_*.zip"), reverse=True)
+    if not backups:
+        return "Yedek oluşturulamadı, bulut kopyalama yapılamadı."
+    latest = backups[0]
+
+    # Hedef klasoru belirle
+    target = (target_dir or str(get_app_config_value("cloud_backup_dir", "") or "")).strip()
+    if target:
+        base = Path(target).expanduser()
+    else:
+        clouds = _detect_cloud_dirs()
+        if not clouds:
+            return ("Bilgisayarda OneDrive/Google Drive/Dropbox klasörü bulamadım. "
+                    "İstersen bir klasör yolu ver (cloud_sync target_dir=...), oraya yedeklerim.")
+        base = clouds[0]
+
+    dest_dir = base / "EXON_Yedekler"
+    try:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / latest.name
+        shutil.copy2(latest, dest)
+        # Hedefi hatirla
+        save_app_config({"cloud_backup_dir": str(base)})
+        return (f"Yedek buluta kopyalandı ✓\n{dest}\n"
+                f"({base.name} klasörü otomatik senkronize olur.)")
+    except Exception as exc:
+        return f"Bulut kopyalama başarısız: {exc}"
+
+
+def cloud_status() -> str:
+    """Bulut yedekleme durumu: tespit edilen klasorler + ayarli hedef."""
+    lines = ["[BULUT YEDEKLEME]"]
+    saved = str(get_app_config_value("cloud_backup_dir", "") or "").strip()
+    if saved:
+        lines.append(f"Ayarlı hedef: {saved}\\EXON_Yedekler")
+    clouds = _detect_cloud_dirs()
+    if clouds:
+        lines.append("Bulunan bulut klasörleri:")
+        for c in clouds:
+            lines.append(f"  • {c}")
+    else:
+        lines.append("Bilgisayarda otomatik bulut klasörü bulunamadı.")
+    lines.append("'buluta yedekle' diyerek en son yedeği oraya kopyalayabilirsin.")
+    return "\n".join(lines)

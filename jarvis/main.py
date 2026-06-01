@@ -220,7 +220,9 @@ from actions.research import search_academic, resolve_doi
 from actions.multi_agent import expert_panel, list_agents
 from actions.plugin_system import (load_plugins, list_plugins, run_plugin, toggle_plugin)
 from actions.local_llm import list_local_models, local_generate
-from actions.backup import create_backup, list_backups, restore_backup
+from actions.backup import (create_backup, list_backups, restore_backup,
+                            cloud_sync, cloud_status)
+from actions.video_analyze import analyze_video
 from actions.license_manager import is_pro as _is_pro, PRO_TOOLS
 from actions.wake_word import WakeWordListener
 from actions.scheduler import TaskScheduler
@@ -1408,16 +1410,35 @@ TOOL_DECLARATIONS = [
     {
         "name": "backup_data",
         "description": (
-            "Yedekleme/taşıma. action: create (tüm veriyi zip'e al), list (yedekleri "
-            "listele), restore (filename ile geri yükle). Ayarlar+hafıza+bilgi tabanı dahil."
+            "Yedekleme/taşıma/bulut. action: create (tüm veriyi zip'e al), list (yedekleri "
+            "listele), restore (filename ile geri yükle), cloud (en son yedeği OneDrive/Drive/"
+            "Dropbox klasörüne kopyala), cloud_status (bulut durumu). Ayarlar+hafıza+bilgi tabanı dahil."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "action":   {"type": "STRING", "description": "create | list | restore"},
-                "filename": {"type": "STRING", "description": "restore için yedek dosya adı (boşsa en yenisi)"}
+                "action":   {"type": "STRING", "description": "create | list | restore | cloud | cloud_status"},
+                "filename": {"type": "STRING", "description": "restore için yedek dosya adı (boşsa en yenisi)"},
+                "target":   {"type": "STRING", "description": "cloud için özel klasör yolu (boşsa otomatik bulut klasörü)"}
             },
             "required": ["action"]
+        }
+    },
+    {
+        "name": "analyze_video",
+        "description": (
+            "Bir video dosyasını analiz edip özetler (videodan kareler alıp Gemini vision "
+            "ile inceler). Kullanıcı 'şu videoyu analiz et/özetle' dediğinde kullan. "
+            "OpenCV gerekir (yoksa kibarca yönlendirir)."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "video_path": {"type": "STRING", "description": "Video dosyasının tam yolu"},
+                "query":      {"type": "STRING", "description": "Video hakkında özel soru (opsiyonel)"},
+                "n_frames":   {"type": "NUMBER", "description": "İncelenecek kare sayısı (3-12, varsayılan 6)"}
+            },
+            "required": ["video_path"]
         }
     }
 ]
@@ -1477,7 +1498,7 @@ def load_system_prompt() -> str:
         "- 'Kendini geliştir/denetle' → self_audit (EXON kendi sistemini analiz eder).\n"
         "- Zor/önemli karar veya derin analiz → expert_panel (çoklu uzman görüşü + sentez). "
         "Eklentiler → manage_plugins; yerel/çevrimdışı model → local_model; "
-        "yedek al/geri yükle/taşı → backup_data.\n"
+        "yedek al/geri yükle/taşı/buluta gönder → backup_data. Video özetle/analiz et → analyze_video.\n"
         "- Önemli bir kişisel bilgi (isim, tercih, proje, ilgi alanı) duyunca save_memory'yi sessizce çağır; "
         "önceki bilgiyle çelişki varsa kullanıcıya kibarca sor.\n"
         "ŞARKI: Kullanıcı şarkı isterse compose_song ile (tür/dil/ruh hali) söz üret; arkada ritim otomatik çalar. "
@@ -2343,9 +2364,21 @@ class ExonLive:
                 elif act == "restore":
                     r = await loop.run_in_executor(
                         None, lambda: restore_backup(args.get("filename", "")))
+                elif act == "cloud":
+                    r = await loop.run_in_executor(
+                        None, lambda: cloud_sync(args.get("target", "")))
+                elif act in ("cloud_status", "cloudstatus"):
+                    r = await loop.run_in_executor(None, cloud_status)
                 else:
                     r = await loop.run_in_executor(None, create_backup)
                 result = r or "Yedekleme işlemi tamamlandı."
+
+            elif name == "analyze_video":
+                r = await loop.run_in_executor(
+                    None, lambda: analyze_video(args.get("video_path", ""),
+                                                args.get("query", ""),
+                                                int(args.get("n_frames", 6) or 6)))
+                result = r or "Video analizi tamamlanamadı."
 
             else:
                 result = f"Bilinmeyen araç: {name}"
