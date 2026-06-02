@@ -50,7 +50,7 @@ class EmotionEngine:
         self._emotion = "notr"
         self._intensity = 0.0          # 0..1
         self._updated = time.time()
-        self._decay_secs = 90.0        # ~1.5 dk'da notr'e doner
+        self._decay_secs = 180.0       # ~3 dk'da yavasca notr'e doner
 
     # ── Acma/kapama ──────────────────────────────────────────────────────────
     def set_enabled(self, value: bool) -> None:
@@ -67,7 +67,12 @@ class EmotionEngine:
     def toggle(self) -> bool:
         with self._lock:
             self._enabled = not self._enabled
-            if not self._enabled:
+            if self._enabled:
+                # Açılınca hemen görünür bir his ile başla (kullanıcı yüzü görsün).
+                self._emotion = "mutlu"
+                self._intensity = 0.7
+                self._updated = time.time()
+            else:
                 self._emotion = "notr"
                 self._intensity = 0.0
             return self._enabled

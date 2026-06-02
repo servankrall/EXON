@@ -2143,16 +2143,98 @@ class ExonUI:
                 bh = int(hr*0.06 + hr*0.22*amp)
                 bx = sx + i*(bw+gap)
                 c.create_rectangle(bx, my-bh, bx+bw, my+bh, fill=col, outline="")
-        def mouth_smile():
-            c.create_arc(FCX-mw, my-mw, FCX+mw, my+int(mw*0.4),
+        def mouth_smile(big=False):
+            span = int(mw*1.2) if big else mw
+            c.create_arc(FCX-span, my-span, FCX+span, my+int(span*0.4),
                          start=200, extent=140, outline=col, width=4, style="arc")
         def mouth_frown():
             c.create_arc(FCX-mw, my-int(mw*0.4), FCX+mw, my+mw,
                          start=20, extent=140, outline=col, width=4, style="arc")
         def mouth_line():
             c.create_line(FCX-mw, my, FCX+mw, my, fill=col2, width=4)
+        def mouth_o():
+            r = int(mw*0.5)
+            c.create_oval(FCX-r, my-r, FCX+r, my+r, outline=col, width=4)
+        def mouth_small():
+            c.create_arc(FCX-int(mw*0.5), my-int(mw*0.4), FCX+int(mw*0.5), my+int(mw*0.5),
+                         start=210, extent=120, outline=col, width=3, style="arc")
+        def brow(cx, inner_down=False, raised=False):
+            yb = ey - eh - int(hr*0.16)
+            if raised:
+                yb -= int(hr*0.06)
+            if inner_down:  # kızgın: iç uçlar aşağı
+                if cx < FCX:
+                    c.create_line(cx-ew, yb, cx+ew, yb+int(hr*0.12), fill=col, width=4)
+                else:
+                    c.create_line(cx-ew, yb+int(hr*0.12), cx+ew, yb, fill=col, width=4)
+            else:  # üzgün: iç uçlar yukarı (ters)
+                if cx < FCX:
+                    c.create_line(cx-ew, yb+int(hr*0.10), cx+ew, yb, fill=col, width=3)
+                else:
+                    c.create_line(cx-ew, yb, cx+ew, yb+int(hr*0.10), fill=col, width=3)
+        def tear(cx):
+            ty = ey + eh + int(hr*0.04)
+            c.create_oval(cx-3, ty, cx+3, ty+int(hr*0.14),
+                          fill=self._ac(120, 200, 255, 200), outline="")
 
-        if state == "PAUSED":
+        # ── Duygu modu: yüz ifadesini RUH HALİNE göre çiz ───────────────────
+        emo = None
+        if state not in ("PAUSED", "ERROR") and not game:
+            try:
+                from actions.emotion import ENGINE
+                cur = ENGINE.current()
+                if cur["enabled"] and cur["emotion"] != "notr" and cur["intensity"] > 0.12:
+                    emo = cur["emotion"]
+            except Exception:
+                emo = None
+
+        if emo:
+            mouth_anim = mouth_grille if self.speaking else None
+            if emo == "mutlu":
+                (eye_closed if blink else eye_happy)(lx)
+                (eye_closed if blink else eye_happy)(rx)
+                (mouth_anim or (lambda: mouth_smile(big=True)))()
+            elif emo == "heyecanli":
+                # parlak, büyük gözler + açık ağız (titreşimli)
+                eye_full(lx); eye_full(rx)
+                wob = int(2*math.sin(t*0.5))
+                c.create_text(FCX+int(hr*0.7)+wob, fy-int(hr*0.5), text="!",
+                              fill=col, font=font_display(16))
+                (mouth_anim or mouth_o)()
+            elif emo == "sakin":
+                # yarı kapalı huzurlu gözler
+                for cx in (lx, rx):
+                    c.create_arc(cx-ew, ey-int(eh*0.5), cx+ew, ey+eh,
+                                 start=200, extent=140, outline=col, width=3, style="arc")
+                (mouth_anim or mouth_small)()
+            elif emo == "merakli":
+                # bir kaş kalkık + yana bakan bebekler
+                eye_full(lx); eye_full(rx)
+                brow(lx, raised=True)
+                c.create_text(FCX+int(hr*0.62), fy-int(hr*0.5), text="?",
+                              fill=col, font=font_display(15))
+                (mouth_anim or mouth_small)()
+            elif emo == "uzgun":
+                brow(lx); brow(rx)
+                eye_full(lx); eye_full(rx)
+                if (t // 40) % 3 == 0:
+                    tear(lx)
+                (mouth_anim or mouth_frown)()
+            elif emo == "kizgin":
+                brow(lx, inner_down=True); brow(rx, inner_down=True)
+                eye_angry(lx, True); eye_angry(rx, False)
+                (mouth_anim or mouth_frown)()
+            elif emo == "sefkatli":
+                (eye_closed if blink else eye_happy)(lx)
+                (eye_closed if blink else eye_happy)(rx)
+                # kalpler
+                for hx in (FCX-int(hr*0.7), FCX+int(hr*0.7)):
+                    c.create_text(hx, fy-int(hr*0.45), text="♥",
+                                  fill=self._ac(255, 130, 180, 220), font=font_display(13))
+                (mouth_anim or (lambda: mouth_smile(big=True)))()
+            else:
+                eye_full(lx); eye_full(rx); mouth_smile()
+        elif state == "PAUSED":
             eye_closed(lx); eye_closed(rx); mouth_line()
             c.create_text(FCX+int(hr*0.62), fy-int(hr*0.55), text="z z", fill=col, font=font_display(14))
         elif state == "ERROR":
@@ -2232,6 +2314,18 @@ class ExonUI:
         if self._game_mode:
             c.create_text(self.FCX, self.CTRL_Y-54, text="🎮 GAME MODE",
                           fill=C_GREEN, font=font_body_bold(11))
+        else:
+            # Duygu modu açıksa o anki ruh halini göster
+            try:
+                from actions.emotion import ENGINE
+                ecur = ENGINE.current()
+                if ecur["enabled"]:
+                    er, eg, eb = ecur["rgb"]
+                    label = f"{ecur['emoji']} {ecur['emotion'].upper()}"
+                    c.create_text(self.FCX, self.CTRL_Y-54, text=label,
+                                  fill=self._ac(er, eg, eb, 255), font=font_body_bold(12))
+            except Exception:
+                pass
 
         c.create_rectangle(0, 0, W, HDR_H, fill="#03070f", outline="")
         c.create_line(0, HDR_H, W, HDR_H, fill=C_MID, width=1)
