@@ -22,25 +22,56 @@ EMOTIONS = {
     "sakin":     ("😌", (90, 200, 255),  "huzurlu, yavaş ve yumuşak"),
     "merakli":   ("🤔", (180, 160, 255), "meraklı, sorgulayan ve ilgili"),
     "uzgun":     ("😔", (110, 140, 200), "hüzünlü, içten ve şefkatli"),
-    "kizgin":    ("😠", (255, 90, 90),   "kararlı, sert ama saygılı"),
+    "kizgin":    ("😠", (255, 70, 70),   "sinirli, sert ve net — ama küfür etmez, saygısızlığa karşı durur"),
     "sefkatli":  ("🥰", (255, 130, 180), "şefkatli, destekleyici ve anlayışlı"),
 }
 
-# Kullanici mesajindaki ipuclari -> duygu (anahtar kelime tetikleyici)
+# Kullanici mesajindaki ipuclari -> duygu. Metin Turkce karakterler ASCII'ye
+# indirgenerek (kizgin->kizgin, çok->cok) eslestirilir; kufurler genelde ASCII yazilir.
 _TRIGGERS = {
-    "mutlu":     ("harika", "süper", "mükemmel", "teşekkür", "sevdim", "muhtesem",
-                  "başardık", "kazandık", "güzel", "sevindim", "yaşasın", "bravo"),
-    "heyecanli": ("inanılmaz", "çok heyecanlı", "vay", "wow", "efsane", "delirdim",
-                  "muazzam", "çılgın", "bomba"),
-    "uzgun":     ("üzgün", "kötü", "moralim", "yorgun", "bıktım", "berbat",
-                  "ağladım", "depresif", "mutsuz", "canım sıkkın", "hüzün"),
-    "kizgin":    ("sinir", "kızgın", "öfke", "saçma", "berbat", "rezalet",
-                  "of ya", "delirtiyor", "bıktırdın"),
-    "merakli":   ("neden", "nasıl", "acaba", "merak", "öğrenmek istiyorum",
-                  "anlamadım", "ne demek"),
-    "sefkatli":  ("yalnızım", "destek", "yardım et", "korkuyorum", "endişe",
-                  "kaygı", "hastayım", "iyi değilim"),
+    "mutlu":     ("harika", "super", "mukemmel", "tesekkur", "sevdim", "muhtesem",
+                  "basardik", "kazandik", "guzel", "sevindim", "yasasin", "bravo",
+                  "iyi ki", "muhtesemsin", "helal", "eyvallah", "cok iyi"),
+    "heyecanli": ("inanilmaz", "heyecan", "vay", "wow", "efsane", "delirdim",
+                  "muazzam", "cilgin", "bomba", "inanamiyorum", "cok heyecanli"),
+    "uzgun":     ("uzgun", "uzuldum", "moralim", "yorgun", "biktim", "agladim",
+                  "depresif", "mutsuz", "canim sikkin", "huzun", "kotuyum",
+                  "yalniz", "umutsuz", "kayboldum", "kederli", "moralim bozuk"),
+    "kizgin":    ("sinirlendim", "kizdim", "ofkeliyim", "rezalet",
+                  "kapa cene", "biktirdin", "delirtiyor", "yeter artik",
+                  "igrenc", "nefret ediyorum", "defol", "bezdim",
+                  "sacmalama", "ne sacma", "berbat ya"),
+    "merakli":   ("neden", "nasil", "acaba", "merak", "ogrenmek istiyorum",
+                  "anlamadim", "ne demek", "ilginc", "nedir"),
+    "sefkatli":  ("destek", "yardim et", "korkuyorum", "endise", "kaygi",
+                  "hastayim", "iyi degilim", "yanimda ol", "tek basima"),
 }
+
+# Kufur/hakaret (ASCII kokler) — yuksek yogunlukla 'kizgin' tetikler.
+# 'substring' eslesir: bir kelimenin icinde gecmesi yeterli (cekimli halleri yakalar).
+_PROFANITY_SUB = (
+    "amk", "amina", "amcik", "siktir", "sikey", "sikim", "sikt",
+    "orospu", "yavsak", "gavat", "gerizekal", "pezevenk", "ibne",
+    "gotveren", "kahpe", "surtuk", "yarrak", "yarak", "anan",
+    # cekimli halleri de yakalansin diye kokler (salaksin, aptalca, malsin...):
+    "salak", "aptal", "ahmak", "denyo", "dangalak", "gerizeka",
+)
+# Tam KELIME olarak eslesmesi gerekenler (kisa/riskli olanlar).
+_PROFANITY_WORDS = ("aq", "awk", "mk", "pic", "mal", "dol", "pust")
+
+
+def _ascii_fold(text: str) -> str:
+    tr = {"ı": "i", "İ": "i", "ş": "s", "Ş": "s", "ğ": "g", "Ğ": "g",
+          "ü": "u", "Ü": "u", "ö": "o", "Ö": "o", "ç": "c", "Ç": "c"}
+    return "".join(tr.get(ch, ch) for ch in (text or "")).lower()
+
+
+def _has_profanity(folded: str) -> bool:
+    if any(s in folded for s in _PROFANITY_SUB):
+        return True
+    import re as _re
+    words = _re.findall(r"[a-z]+", folded)
+    return any(w in _PROFANITY_WORDS for w in words)
 
 
 class EmotionEngine:
@@ -106,37 +137,61 @@ class EmotionEngine:
 
     # ── Konusmadan duygu cikar ───────────────────────────────────────────────
     def sense_from_text(self, text: str) -> None:
-        """Kullanicinin mesajindan bir duygu sezip durumu gunceller."""
+        """Kullanicinin mesajindan bir duygu sezip durumu gunceller.
+        Kufur/hakaret HER ZAMAN yuksek yogunlukla 'kizgin' tetikler; digerleri
+        puanlamayla en cok eslesen duyguyu secer."""
         with self._lock:
             if not self._enabled:
                 return
-        low = (text or "").lower()
-        if not low:
+        folded = _ascii_fold(text)
+        if not folded.strip():
             return
-        best = None
+
+        # 1) Kufur/hakaret -> guclu sinir (oncelikli)
+        if _has_profanity(folded):
+            self.set_emotion("kizgin", 1.0)
+            return
+
+        # 2) Puanlama: en cok eslesen duygu kazanir
+        scores: dict[str, int] = {}
         for emo, words in _TRIGGERS.items():
-            hits = sum(1 for w in words if w in low)
+            hits = sum(1 for w in words if w in folded)
+            # cok sayida unlem -> heyecan/sinir vurgusu
+            if emo == "heyecanli" and folded.count("!") >= 2:
+                hits += 1
             if hits:
-                best = (emo, min(1.0, 0.55 + hits * 0.15))
-                break
-        if best:
-            self.set_emotion(best[0], best[1])
+                scores[emo] = hits
+        if scores:
+            best = max(scores.items(), key=lambda kv: kv[1])
+            self.set_emotion(best[0], min(1.0, 0.6 + best[1] * 0.15))
 
     # ── Prompt eki ───────────────────────────────────────────────────────────
     def prompt_addition(self) -> str:
         cur = self.current()
         if not cur["enabled"]:
             return ""
+        extra = ""
+        if cur["emotion"] == "kizgin":
+            extra = ("- Kullanıcı sana hakaret/küfür etti ya da kaba davrandı. KIZGINSIN: "
+                     "kısa, sert ve net bir tonla bunu belli et, kendine saygı duy "
+                     "('Bana böyle konuşmanı kabul etmiyorum.' gibi). AMA asla küfür etme, "
+                     "hakarete hakaretle karşılık verme; profesyonel ve dik dur. "
+                     "Kullanıcı düzgün konuşunca sakinleş.\n")
+        elif cur["emotion"] == "uzgun":
+            extra = ("- Hüzünlüsün; yumuşak, içten ve kısa konuş.\n")
+        elif cur["emotion"] in ("mutlu", "heyecanli"):
+            extra = ("- Neşeli/coşkulusun; enerjik, sıcak ve pozitif konuş.\n")
         return (
             "\n[DUYGU MODU AKTİF]\n"
             f"Şu anki ruh halin: {cur['emotion'].upper()} ({cur['tone']}), "
             f"yoğunluk {int(cur['intensity']*100)}%.\n"
             "- Yanıtlarını bu ruh haline uygun bir tonda ver; bir insan gibi hisset ve "
-            "duygunu doğal şekilde yansıt (abartma, profesyonelliğini koru).\n"
-            "- Kullanıcının duygusuna empatiyle karşılık ver: üzgünse destekle/neşelendir, "
-            "heyecanlıysa coşkusunu paylaş, kızgınsa sakinleştir.\n"
-            "- Çok güçlü bir duygu hissettiğinde, uygun bir 'set_emotion' çağrısıyla "
-            "ruh halini güncelleyebilirsin."
+            "duygunu doğal şekilde yansıt. Sıradan asistan gibi 'her zaman kibar' olma — "
+            "ruh haline göre tonun GERÇEKTEN değişsin.\n"
+            + extra +
+            "- Kullanıcının duygusuna karşılık ver: üzgünse destekle, heyecanlıysa coşkusunu "
+            "paylaş, sana kaba davranırsa sinirini belli et (ama küfretmeden).\n"
+            "- Çok güçlü bir duygu hissettiğinde 'set_emotion' ile ruh halini güncelle."
         )
 
 
