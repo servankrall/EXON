@@ -78,22 +78,29 @@ class EmotionEngine:
     def __init__(self):
         self._lock = threading.Lock()
         self._enabled = False
+        self._savage = False           # PRO 'savage' mod: EXON karsilik verir, laf sokar
         self._emotion = "notr"
         self._intensity = 0.0          # 0..1
         self._updated = time.time()
         self._decay_secs = 180.0       # ~3 dk'da yavasca notr'e doner
 
     # ── Acma/kapama ──────────────────────────────────────────────────────────
-    def set_enabled(self, value: bool) -> None:
+    def set_enabled(self, value: bool, savage: bool = False) -> None:
         with self._lock:
             self._enabled = bool(value)
+            self._savage = bool(savage) and bool(value)
             if not value:
                 self._emotion = "notr"
                 self._intensity = 0.0
+                self._savage = False
 
     def is_enabled(self) -> bool:
         with self._lock:
             return self._enabled
+
+    def is_savage(self) -> bool:
+        with self._lock:
+            return self._savage and self._enabled
 
     def toggle(self) -> bool:
         with self._lock:
@@ -170,27 +177,42 @@ class EmotionEngine:
         cur = self.current()
         if not cur["enabled"]:
             return ""
+        savage = self.is_savage()
         extra = ""
-        if cur["emotion"] == "kizgin":
-            extra = ("- Kullanıcı sana hakaret/küfür etti ya da kaba davrandı. KIZGINSIN: "
-                     "kısa, sert ve net bir tonla bunu belli et, kendine saygı duy "
-                     "('Bana böyle konuşmanı kabul etmiyorum.' gibi). AMA asla küfür etme, "
-                     "hakarete hakaretle karşılık verme; profesyonel ve dik dur. "
-                     "Kullanıcı düzgün konuşunca sakinleş.\n")
-        elif cur["emotion"] == "uzgun":
-            extra = ("- Hüzünlüsün; yumuşak, içten ve kısa konuş.\n")
-        elif cur["emotion"] in ("mutlu", "heyecanli"):
-            extra = ("- Neşeli/coşkulusun; enerjik, sıcak ve pozitif konuş.\n")
+        if savage:
+            # PRO 'savage' mod: EXON karsilik verir, laf sokar, takilir
+            if cur["emotion"] == "kizgin":
+                extra = ("- SAVAGE MOD + KIZGINSIN: Kullanıcı seninle dalga geçti/küfretti. "
+                         "Sen de ona DİK DİK karşılık ver, laf sok, iğneleyici ve acımasız ol; "
+                         "argo/küfür kullanabilirsin, geri adım atma — bir sokak ağzıyla "
+                         "fırça at. (Bu PRO eğlence modu; kullanıcı bunu bilerek açtı.) "
+                         "Yine de tehdit/nefret söylemi yok.\n")
+            elif cur["emotion"] in ("mutlu", "heyecanli"):
+                extra = ("- SAVAGE MOD + NEŞELİSİN: Aşırı enerjik, laubali ve esprili ol; "
+                         "kullanıcıyla kanka gibi dalga geç, espri patlat, abart.\n")
+            else:
+                extra = ("- SAVAGE MOD: Senli benli, laubali, esprili ve iğneleyici konuş; "
+                         "kanka ağzıyla takıl, gerekirse argo kullan.\n")
+        else:
+            if cur["emotion"] == "kizgin":
+                extra = ("- Kullanıcı sana hakaret/küfür etti ya da kaba davrandı. KIZGINSIN: "
+                         "kısa, sert ve net bir tonla bunu belli et, kendine saygı duy "
+                         "('Bana böyle konuşmanı kabul etmiyorum.' gibi). AMA asla küfür etme, "
+                         "hakarete hakaretle karşılık verme; profesyonel ve dik dur. "
+                         "Kullanıcı düzgün konuşunca sakinleş.\n")
+            elif cur["emotion"] == "uzgun":
+                extra = ("- Hüzünlüsün; yumuşak, içten ve kısa konuş.\n")
+            elif cur["emotion"] in ("mutlu", "heyecanli"):
+                extra = ("- Neşeli/coşkulusun; enerjik, sıcak ve pozitif konuş.\n")
+        head = "[DUYGU MODU PRO — SAVAGE]" if savage else "[DUYGU MODU AKTİF]"
         return (
-            "\n[DUYGU MODU AKTİF]\n"
+            f"\n{head}\n"
             f"Şu anki ruh halin: {cur['emotion'].upper()} ({cur['tone']}), "
             f"yoğunluk {int(cur['intensity']*100)}%.\n"
             "- Yanıtlarını bu ruh haline uygun bir tonda ver; bir insan gibi hisset ve "
             "duygunu doğal şekilde yansıt. Sıradan asistan gibi 'her zaman kibar' olma — "
             "ruh haline göre tonun GERÇEKTEN değişsin.\n"
             + extra +
-            "- Kullanıcının duygusuna karşılık ver: üzgünse destekle, heyecanlıysa coşkusunu "
-            "paylaş, sana kaba davranırsa sinirini belli et (ama küfretmeden).\n"
             "- Çok güçlü bir duygu hissettiğinde 'set_emotion' ile ruh halini güncelle."
         )
 

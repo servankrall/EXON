@@ -795,6 +795,18 @@ class ExonUI:
             "✨ GÖRSEL OLUŞTUR", C_PRI, self._on_generate_image_click, width=164)
 
     def _on_upload_image_click(self):
+        # Free kullanıcı: günlük kısıtlı deneme; Pro: sınırsız.
+        try:
+            from actions.trial import image_allowed, consume_image, image_remaining
+            from actions.license_manager import is_pro as _ip
+            if not image_allowed():
+                self.write_log("SYS: Ücretsiz görsel yükleme denemen bugünlük doldu. "
+                               "Sınırsız için EXON Pro'ya geç.")
+                self._open_pro_dialog()
+                return
+            _pre_pro = _ip()
+        except Exception:
+            _pre_pro = True
         path = filedialog.askopenfilename(
             title="Analiz için bir görsel seç",
             filetypes=[("Görseller", "*.png *.jpg *.jpeg *.webp *.bmp *.gif"),
@@ -802,6 +814,14 @@ class ExonUI:
         )
         if not path:
             return
+        # Hak kullanımını işle (sadece free)
+        try:
+            if not _pre_pro:
+                from actions.trial import consume_image, image_remaining
+                consume_image()
+                self.write_log(f"SYS: Görsel yükleme denemesi — bugün {image_remaining()} hakkın kaldı.")
+        except Exception:
+            pass
         self.write_log(f"Siz: [Görsel yüklendi: {os.path.basename(path)}]")
         self.show_image_preview(path, title="EXON · Yüklenen Görsel")
         if self.on_image_uploaded:
@@ -1282,10 +1302,14 @@ class ExonUI:
         try:
             from actions.emotion import ENGINE
             on = ENGINE.is_enabled()
+            savage = ENGINE.is_savage()
             cur = ENGINE.current()
         except Exception:
-            on, cur = False, {"emoji": ""}
-        if on:
+            on, savage, cur = False, False, {"emoji": ""}
+        if on and savage:
+            self._plus_btn.configure(text=cur.get("emoji", "🔥") or "🔥",
+                                     fg=C_BG, bg=C_RED, highlightbackground=C_RED)
+        elif on:
             self._plus_btn.configure(text=cur.get("emoji", "❤") or "❤",
                                      fg=C_BG, bg=C_GOLD, highlightbackground=C_GOLD)
         else:
@@ -1293,22 +1317,136 @@ class ExonUI:
                                      highlightbackground=C_MID)
 
     def _toggle_emotion_mode(self):
-        """'+' butonu: Duygu Modu'nu açar/kapatır."""
+        """'+' butonu: zaten açıksa kapatır, kapalıysa küçük menü açar."""
         try:
             from actions.emotion import ENGINE
-            now = ENGINE.toggle()
+            if ENGINE.is_enabled():
+                self._close_plus_menu()
+                self._set_emotion_mode(False, False)
+                return
+        except Exception:
+            pass
+        self._open_plus_menu()
+
+    def _open_plus_menu(self):
+        """'+' butonunun hemen ÜSTÜNDE küçük bir menü açar."""
+        self._close_plus_menu()
+        try:
+            from actions.trial import emotion_remaining
+            from actions.license_manager import is_pro
+            pro = is_pro()
+            rem = emotion_remaining()
+        except Exception:
+            pro, rem = False, 0
+
+        menu = tk.Frame(self.root, bg="#081426",
+                        highlightbackground=C_CYAN, highlightthickness=1)
+        self._plus_menu = menu
+        items = []
+
+        # Serbest duygu modu (free: kısıtlı süre, pro: sınırsız)
+        if pro:
+            free_label = "❤  Duygu Modu"
+        else:
+            mins = int(rem // 60)
+            free_label = (f"❤  Duygu Modu  (deneme: {mins} dk)" if rem > 0
+                          else "❤  Duygu Modu  (deneme doldu)")
+        items.append((free_label, C_CYAN, lambda: self._pick_emotion_mode(False)))
+
+        # PRO savage mod
+        pro_label = "🔥  Duygu Modu PRO — Savage" + ("" if pro else "  🔒")
+        items.append((pro_label, C_GOLD, lambda: self._pick_emotion_mode(True)))
+
+        for i, (label, color, cmd) in enumerate(items):
+            b = tk.Button(menu, text=label, command=cmd, cursor="hand2",
+                          fg=color, bg="#081426", activebackground="#0e2440",
+                          activeforeground=color, font=font_body_bold(10),
+                          borderwidth=0, anchor="w", padx=12, pady=7)
+            b.pack(fill="x")
+
+        menu.update_idletasks()
+        mw = max(220, menu.winfo_reqwidth())
+        mh = menu.winfo_reqheight()
+        px = self._plus_btn.winfo_x()
+        py = self._plus_btn.winfo_y()
+        menu.place(x=px, y=py - mh - 6, width=mw, height=mh)
+        menu.lift()
+        # Disari tiklayinca kapat
+        self._plus_menu_dismiss = self.root.bind("<Button-1>", self._maybe_close_plus_menu, add="+")
+
+    def _maybe_close_plus_menu(self, event):
+        m = getattr(self, "_plus_menu", None)
+        if not m:
+            return
+        # Menü veya + butonu üstüne tıklanmadıysa kapat
+        wx, wy, ww, wh = m.winfo_rootx(), m.winfo_rooty(), m.winfo_width(), m.winfo_height()
+        if not (wx <= event.x_root <= wx+ww and wy <= event.y_root <= wy+wh):
+            bx, by = self._plus_btn.winfo_rootx(), self._plus_btn.winfo_rooty()
+            bw, bh = self._plus_btn.winfo_width(), self._plus_btn.winfo_height()
+            if not (bx <= event.x_root <= bx+bw and by <= event.y_root <= by+bh):
+                self._close_plus_menu()
+
+    def _close_plus_menu(self):
+        m = getattr(self, "_plus_menu", None)
+        if m:
+            try:
+                m.destroy()
+            except Exception:
+                pass
+            self._plus_menu = None
+
+    def _pick_emotion_mode(self, savage: bool):
+        """Menüden bir mod seçildi."""
+        self._close_plus_menu()
+        # PRO savage sadece Pro kullanıcıda
+        if savage:
+            try:
+                from actions.license_manager import is_pro
+                if not is_pro():
+                    self._open_pro_dialog()
+                    return
+            except Exception:
+                pass
+        else:
+            # Free deneme süresi kontrolü
+            try:
+                from actions.trial import begin_emotion
+                ok, msg = begin_emotion()
+                if not ok:
+                    self.write_log("SYS: " + msg)
+                    self._open_pro_dialog()
+                    return
+                if msg:
+                    self.write_log("SYS: " + msg)
+            except Exception:
+                pass
+        self._set_emotion_mode(True, savage)
+
+    def _set_emotion_mode(self, enable: bool, savage: bool):
+        try:
+            from actions.emotion import ENGINE
+            from actions.trial import end_emotion
+            if enable:
+                ENGINE.set_enabled(True, savage=savage)
+            else:
+                ENGINE.set_enabled(False)
+                try:
+                    end_emotion()
+                except Exception:
+                    pass
         except Exception as exc:
-            self.write_log(f"ERR: Duygu modu açılamadı — {exc}")
+            self.write_log(f"ERR: Duygu modu — {exc}")
             return
         self._draw_plus_button()
-        if now:
-            self.write_log("SYS: ❤ Duygu Modu AÇILDI — EXON artık duygularını yansıtacak.")
-            if self.on_emotion_toggle:
-                threading.Thread(target=self.on_emotion_toggle, args=(True,), daemon=True).start()
+        if enable:
+            if savage:
+                self.write_log("SYS: 🔥 DUYGU MODU PRO (Savage) AÇILDI — EXON sana karşılık verecek!")
+            else:
+                self.write_log("SYS: ❤ Duygu Modu AÇILDI — EXON artık duygularını yansıtacak.")
         else:
             self.write_log("SYS: Duygu Modu kapatıldı.")
-            if self.on_emotion_toggle:
-                threading.Thread(target=self.on_emotion_toggle, args=(False,), daemon=True).start()
+        if self.on_emotion_toggle:
+            threading.Thread(target=self.on_emotion_toggle, args=(enable,), daemon=True).start()
 
     def _place_layout_widgets(self):
         self.log_frame.place(x=self.CHAT_X, y=self.CHAT_Y,
@@ -1554,6 +1692,16 @@ class ExonUI:
             threading.Thread(target=self._update_stats, daemon=True).start()
         if t % 1800 == 1:
             self._kick_brief_refresh()
+        # Free deneme süresi dolduysa duygu modunu otomatik kapat (~her 5 sn kontrol)
+        if t % 110 == 0:
+            try:
+                from actions.emotion import ENGINE
+                from actions.trial import emotion_expired
+                if ENGINE.is_enabled() and emotion_expired():
+                    self._set_emotion_mode(False, False)
+                    self.write_log("SYS: ⏳ Ücretsiz duygu modu süren doldu. Pro ile sınırsız.")
+            except Exception:
+                pass
 
         if self.speaking and t % 3 == 0:
             self._wave_jarvis = [random.randint(6, 30) for _ in range(18)]

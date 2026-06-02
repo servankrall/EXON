@@ -40,17 +40,17 @@ PRO_TOOLS = {
 }
 
 PRO_FEATURES_TR = [
+    "🔥 Duygu Modu PRO (Savage) — EXON sana karsilik verir, laf sokar",
+    "Sinirsiz duygu modu + sinirsiz gorsel yukleme",
     "Sinirsiz gorsel olusturma",
     "Sarki yazma & soyleme (ritimli, tonlu)",
     "Kod asistani (oku / ara / duzelt / yaz)",
     "Metin yazarligi (e-posta, blog, sosyal medya)",
     "Web sayfasi & dokuman ozetleme",
-    "Borsa & hisse fiyatlari",
-    "Gunluk haber brifingi",
+    "Borsa & hisse + gunluk haber",
     "E-posta okuma & gonderme",
-    "Oyun modu (performans yukseltme)",
-    "Ekran analizi (gorsel zeka)",
-    "YouTube kanal analizi",
+    "Oyun modu, ekran & video analizi",
+    "Bilgi tabani (RAG) + coklu uzman paneli",
 ]
 
 PLANS = {
