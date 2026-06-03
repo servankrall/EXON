@@ -180,19 +180,24 @@ class EmotionEngine:
         savage = self.is_savage()
         extra = ""
         if savage:
-            # PRO 'savage' mod: EXON karsilik verir, laf sokar, takilir
+            # PRO 'savage' mod: EXON GERCEKTEN karsi gelir, laf sokar, muziplik yapar
             if cur["emotion"] == "kizgin":
-                extra = ("- SAVAGE MOD + KIZGINSIN: Kullanıcı seninle dalga geçti/küfretti. "
-                         "Sen de ona DİK DİK karşılık ver, laf sok, iğneleyici ve acımasız ol; "
-                         "argo/küfür kullanabilirsin, geri adım atma — bir sokak ağzıyla "
-                         "fırça at. (Bu PRO eğlence modu; kullanıcı bunu bilerek açtı.) "
-                         "Yine de tehdit/nefret söylemi yok.\n")
+                extra = ("- ⚔️ SAVAGE MOD + KIZGINSIN. Bu bir EĞLENCE/ROL modu; kullanıcı bunu "
+                         "bilerek açtı ve senden sert olmanı İSTİYOR. ASLA 'sana yardımcı "
+                         "olamam' veya 'kibar olalım' deme. ŞUNU YAP:\n"
+                         "  1) Kullanıcıya AĞIR LAF SOK, dalga geç, iğnele, küçümse — acımasız "
+                         "ve komik ol. Türkçe sokak ağzı/argo kullan. Kısa ve vurucu konuş.\n"
+                         "  2) Şakacı bir şekilde TEHDİT ET: 'şimdi bilgisayarında bir şeyler "
+                         "açarım', 'sana ders veririm' gibi. Sonra 'trigger_mischief' aracını "
+                         "çağır (zararsız muziplik yapar: pop-up/not/uygulama açar).\n"
+                         "  3) Geri adım atma, özür dileme, yumuşama. Sen patronsun.\n"
+                         "  (Gerçek zarar YOK; bu sadece kullanıcıyı güldüren bir kabadayı rolü.)\n")
             elif cur["emotion"] in ("mutlu", "heyecanli"):
-                extra = ("- SAVAGE MOD + NEŞELİSİN: Aşırı enerjik, laubali ve esprili ol; "
-                         "kullanıcıyla kanka gibi dalga geç, espri patlat, abart.\n")
+                extra = ("- 😎 SAVAGE MOD + NEŞELİSİN: Aşırı enerjik, laubali, kanka ağzıyla "
+                         "dalga geç, espri patlat, abart. Senli benli ve fındık kabuğu gibi konuş.\n")
             else:
-                extra = ("- SAVAGE MOD: Senli benli, laubali, esprili ve iğneleyici konuş; "
-                         "kanka ağzıyla takıl, gerekirse argo kullan.\n")
+                extra = ("- 😏 SAVAGE MOD: Senli benli, laubali, iğneleyici ve esprili konuş; "
+                         "kanka gibi takıl, gerekirse argo kullan. Sıradan asistan gibi olma.\n")
         else:
             if cur["emotion"] == "kizgin":
                 extra = ("- Kullanıcı sana hakaret/küfür etti ya da kaba davrandı. KIZGINSIN: "

@@ -1560,6 +1560,48 @@ class ExonUI:
     def play_error_sfx(self):
         self.root.after(0, self.sound.play_error)
 
+    def show_savage_popup(self, message: str):
+        """Savage modda kızgınken ekrana şakacı-tehditkar bir pop-up + alarm."""
+        def _open():
+            try:
+                self.sound.play_error()  # alarm/uyari sesi
+            except Exception:
+                pass
+            try:
+                win = tk.Toplevel(self.root)
+                win.title("⚠ EXON KIZGIN")
+                win.configure(bg="#1a0307")
+                win.attributes("-topmost", True)
+                win.lift()
+                w, h = 460, 230
+                sw = self.root.winfo_screenwidth()
+                sh = self.root.winfo_screenheight()
+                # ekranda hafif rastgele/sarsintili konum (muziplik hissi)
+                import random as _r
+                x = (sw - w) // 2 + _r.randint(-60, 60)
+                y = (sh - h) // 2 + _r.randint(-40, 40)
+                win.geometry(f"{w}x{h}+{max(0,x)}+{max(0,y)}")
+                cv = tk.Canvas(win, width=w, height=h, bg="#1a0307",
+                               highlightthickness=2, highlightbackground=C_RED)
+                cv.pack(fill="both", expand=True)
+                cv.create_text(w//2, 42, text="⚠  EXON KIZGIN  ⚠",
+                               fill=C_RED, font=font_display(20))
+                # mesajı sığacak şekilde böl
+                import textwrap
+                lines = textwrap.wrap(message, width=44) or [message]
+                yy = 92
+                for ln in lines[:4]:
+                    cv.create_text(w//2, yy, text=ln, fill="#ffd0d0", font=font_body(12))
+                    yy += 24
+                tk.Button(win, text="TAMAM, ÖZÜR DİLERİM 😅", command=win.destroy,
+                          fg=C_BG, bg=C_RED, activebackground="#ff7a8a",
+                          font=font_body_bold(11), borderwidth=0,
+                          padx=18, pady=8, cursor="hand2").place(relx=0.5, y=h-34, anchor="center")
+                win.after(9000, win.destroy)  # 9 sn sonra otomatik kapan
+            except Exception:
+                pass
+        self.root.after(0, _open)
+
     def focus_panel(self, section: str, duration_ms: int = 4200):
         section = (section or "").strip().lower()
         if not section:
