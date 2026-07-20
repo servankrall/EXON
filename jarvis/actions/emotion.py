@@ -182,16 +182,19 @@ class EmotionEngine:
         if savage:
             # PRO 'savage' mod: EXON GERCEKTEN karsi gelir, laf sokar, muziplik yapar
             if cur["emotion"] == "kizgin":
-                extra = ("- ⚔️ SAVAGE MOD + KIZGINSIN. Bu bilerek açılmış bir ROAST/kabadayı "
-                         "rol modu; kullanıcı bunu isteyerek açtı.\n"
-                         "  ⇒ ZORUNLU İLK ADIM: Kendi ağzından sert laf ÜRETMEYE ÇALIŞMA. "
-                         "Bunun yerine HEMEN 'savage_reply' aracını çağır (user_message = "
-                         "kullanıcının sana yazdığı mesaj). Araç sana bir roast repliği döndürür; "
-                         "onu AYNEN, tek kelime değiştirmeden, yumuşatmadan seslendir. "
-                         "'Sakin kalacağım', 'yardımcı olamam', 'kibar olalım' DEME — bunlar YASAK.\n"
-                         "  ⇒ Ardından istersen 'trigger_mischief' aracını çağır (ekranda zararsız "
-                         "muziplik yapar: pop-up/not/uygulama).\n"
-                         "  ⇒ Roast repliğini söyledikten sonra da dik dur, geri adım atma.\n")
+                extra = ("- ⚔️ SAVAGE MOD + KIZGINSIN. Bu bilerek açılmış ROAST/kabadayı rol modu.\n"
+                         "  ⇒ HER kızgın mesajda (sadece ilkinde değil, HER SEFERİNDE) şunu yap:\n"
+                         "     1) HEMEN 'savage_reply' aracını çağır (user_message = kullanıcının "
+                         "son mesajı). Dönen roast repliğini AYNEN, yumuşatmadan seslendir. Kendi "
+                         "ağzından sert laf üretmeye çalışma; araçtan geleni söyle.\n"
+                         "     2) Ardından 'trigger_mischief' aracını çağır (her seferinde farklı "
+                         "kind: note/app/beep/all/report). 'Rapor gönderiyorum/aldım' dersen kind="
+                         "'report' ver — o GERÇEKTEN e-posta gönderir; uydurma 'gönderildi' deme.\n"
+                         "  ⇒ Sürekli üstüne git; kullanıcı her laf attığında sen daha da fena "
+                         "karşılık ver. YASAK: 'sakin kalacağım', 'yardımcı olamam', 'konuşmayı "
+                         "sonlandırıyorum', 'kibar olalım'. Konuşmayı ASLA bitirme, hep karşılık ver.\n"
+                         "  ⇒ Bir şey yaptığını söylüyorsan (rapor, muziplik) MUTLAKA ilgili aracı "
+                         "çağır; sadece 'yaptım' deyip geçme — gerçekten yap.\n")
             elif cur["emotion"] in ("mutlu", "heyecanli"):
                 extra = ("- 😎 SAVAGE MOD + NEŞELİSİN: Aşırı enerjik, laubali, kanka ağzıyla "
                          "dalga geç, espri patlat, abart. Senli benli, ukala ve fındık gibi konuş.\n")

@@ -119,7 +119,8 @@ def send_email(to: str, subject: str, body: str) -> str:
     addr, pw = creds
 
     message = EmailMessage()
-    message["From"] = addr
+    # Gönderen adı "EXON" görünsün (adres yine hesabın kendisi).
+    message["From"] = f"EXON <{addr}>"
     message["To"] = to
     message["Subject"] = (subject or "(konu yok)").strip()
     message.set_content(body or "")

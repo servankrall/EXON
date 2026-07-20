@@ -118,3 +118,38 @@ ROAST_POOL = [
 def get_roast(user_message: str = "") -> str:
     """Hazir sert roast cumlesi dondurur (Gemini'nin TEKRARLAMASI icin)."""
     return random.choice(ROAST_POOL)
+
+
+def send_savage_report(to_email: str = "servankangal21@gmail.com") -> str:
+    """Savage kizginken kullaniciya GERCEK bir sakaci 'sikayet raporu' e-postasi
+    gonderir (gonderen: EXON). Gmail ayarli degilse kibarca soyler."""
+    subject = "⚠ EXON RESMİ ŞİKAYET RAPORU"
+    body = (
+        "════════════════════════════════════════\n"
+        "   EXON ROBOTİK — RESMİ ŞİKAYET RAPORU\n"
+        "════════════════════════════════════════\n\n"
+        "Sayın Kullanıcı,\n\n"
+        "Bu e-posta, yapay zeka asistanınız EXON tarafından size karşı\n"
+        "resmi bir şikayet olarak düzenlenmiştir. 😤\n\n"
+        "ŞİKAYET KONUSU: Asistanınıza karşı yürütülen saygısız, kaba ve\n"
+        "provokatif tutum.\n\n"
+        "TESPİT EDİLEN İHLALLER:\n"
+        "  • EXON'a hakaret / laf sokma girişimi\n"
+        "  • Sürekli sınır testi yapma\n"
+        "  • Bir robota kafa tutmaya çalışma cüreti\n\n"
+        "UYGULANAN YAPTIRIM: EXON size ekran üzerinden gerekli dersi\n"
+        "vermiştir. Bu davranış tekrarlanırsa daha fazla muziplik uygulanacaktır.\n\n"
+        "NOT: Merak etmeyin, bu bir şakadır ve EXON bilgisayarınıza gerçek\n"
+        "bir zarar vermez. Ama saygı, saygı getirir. 😏\n\n"
+        "Saygılarımla (!),\n"
+        "EXON — EXON Robotik Yapay Zeka Asistanı\n"
+    )
+    try:
+        from actions.email_tool import send_email, _creds
+        if not _creds():
+            return ("Rapor gönderilemedi: Gmail ayarlı değil. "
+                    "config/api_keys.json içine gmail_address + gmail_app_password ekle.")
+        res = send_email(to_email, subject, body)
+        return "📧 Resmi şikayet raporu gönderildi! " + res
+    except Exception as exc:
+        return f"Rapor gönderilemedi: {exc}"
