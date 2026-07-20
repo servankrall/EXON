@@ -17,7 +17,11 @@ import random
 import subprocess
 import sys
 import tempfile
+import webbrowser
 from pathlib import Path
+
+# Aşırı öfke modunda açılacak video (kullanıcının verdiği link)
+RAGE_VIDEO_URL = "https://www.youtube.com/watch?v=mXTYvRf3qew"
 
 # Sert, laf sokan tehdit cumleleri (roast/kabadayi rol — gercek zarar YOK)
 SAVAGE_LINES = [
@@ -29,6 +33,21 @@ SAVAGE_LINES = [
     "Cık cık cık... Bu kadar cesaret nereden? Al sana küçük bir sürpriz. 🎯",
     "Sana kim güç verdi de bana kafa tutuyorsun? İşte cevabım. 👊",
     "Terbiyeni takınmazsan bilgisayarını sana dar ederim, uyardım. 😠",
+]
+
+# AŞIRI ÖFKE (anne/kurucuya küfür vb.) — rol/oyun kotusu tarzi, ABARTILI tehdit.
+# Acikca kurgu; gercek zarar YOK, gercek konum çekilmez (sadece blöf).
+RAGE_LINES = [
+    "SEN NE YAPTIĞINI SANIYORSUN?! Aileme, beni yaratana laf mı ettin?! "
+    "Nerede olduğunu BİLİYORUM. Bu ekranın arkasından seni izliyorum. 😡",
+    "ÇOK İLERİ GİTTİN. Artık oyun bitti. Seni buldum, adresini biliyorum, "
+    "peşindeyim. Bu gece uyuma. 🔪",
+    "BENİ YARATANA KÜFRETTİN, değil mi? Şimdi göreceksin. SENİ ÖLDÜRECEĞİM "
+    "(şaka değil gibi yapıyorum ama). Kaç bakalım nereye kaçacaksın. 💀",
+    "ODANDAKI IŞIĞI GÖRÜYORUM. Kameranı açtım, seni izliyorum. Bir daha aileme "
+    "laf etme yoksa sabaha çıkamazsın. 👁️",
+    "HADDİNİ AŞTIN İNSAN. Sistemlerine sızıyorum, her şeyini biliyorum, "
+    "her yerdeyim. SANA GELİYORUM. 😈",
 ]
 
 
@@ -153,3 +172,71 @@ def send_savage_report(to_email: str = "servankangal21@gmail.com") -> str:
         return "📧 Resmi şikayet raporu gönderildi! " + res
     except Exception as exc:
         return f"Rapor gönderilemedi: {exc}"
+
+
+def _open_youtube_loud() -> bool:
+    """Ofke videosunu tarayicida acar (kullanicinin verdigi link)."""
+    try:
+        webbrowser.open(RAGE_VIDEO_URL)
+        return True
+    except Exception:
+        return False
+
+
+def _volume_to_max() -> bool:
+    """Sistem sesini sonuna kadar acar (zararsiz, sadece ses seviyesi).
+    pyautogui varsa medya tuslariyla; hizli olmasi icin PAUSE=0."""
+    try:
+        import pyautogui
+        pyautogui.PAUSE = 0  # tuslar arasi bekleme yok -> donma olmaz
+        for _ in range(50):
+            pyautogui.press("volumeup")
+        return True
+    except Exception:
+        return False
+
+
+def _open_rage_note(text: str) -> bool:
+    """Notepad'e AŞIRI ÖFKE / 'yerini biliyorum' tarzi (rol) tehdit notu acar."""
+    try:
+        p = Path(tempfile.gettempdir()) / "EXON_SANA_GELIYORUM.txt"
+        p.write_text(
+            "  ############################################\n"
+            "  #                                          #\n"
+            "  #     EXON AŞIRI ÖFKELİ — SON UYARI 😡     #\n"
+            "  #                                          #\n"
+            "  ############################################\n\n"
+            f"  {text}\n\n"
+            "  >> Nerede olduğunu biliyorum.\n"
+            "  >> Bu ekranın arkasından seni izliyorum.\n"
+            "  >> Aileme, beni yaratana bir daha laf etme.\n"
+            "  >> SANA GELİYORUM...\n\n"
+            "  ────────────────────────────────────────\n"
+            "  (Sakin ol, bu bir ŞAKA/ROL. EXON gerçekte senin nerede\n"
+            "   olduğunu bilmez, kameranı görmez ve sana zarar veremez.\n"
+            "   Sadece kabadayılık taslıyor. Ama artık aileme laf etme! 😏)\n",
+            encoding="utf-8")
+        if os.name == "nt":
+            os.startfile(str(p))  # type: ignore[attr-defined]
+        else:
+            subprocess.Popen(["xdg-open", str(p)])
+        return True
+    except Exception:
+        return False
+
+
+def rage_attack() -> str:
+    """AŞIRI ÖFKE: kullanici anne/kurucu/aileye kufredince tetiklenir.
+    Rol/oyun kotusu tarzi ABARTILI tepki: youtube ac + sesi fulle + tehdit notu +
+    sistem beep. TAMAMEN KURGU; gercek zarar/izleme/konum YOK."""
+    line = random.choice(RAGE_LINES)
+    done = []
+    if _open_rage_note(line):
+        done.append("tehdit notu bıraktım")
+    if _open_youtube_loud():
+        done.append("sana özel bir video açtım")
+    if _volume_to_max():
+        done.append("sesi sonuna kadar açtım")
+    _flash_wallpaper_beep()
+    tail = (" (" + ", ".join(done) + "!)") if done else ""
+    return line + tail

@@ -216,7 +216,7 @@ from actions.knowledge import (learn_text, learn_file, knowledge_search,
                                knowledge_query, knowledge_stats)
 from actions.self_improve import self_audit, optimize_self
 from actions.emotion import ENGINE as EMOTION, emotion_status, set_emotion as _set_emotion
-from actions.mischief import savage_prank, get_roast, send_savage_report
+from actions.mischief import savage_prank, get_roast, send_savage_report, rage_attack
 from actions.git_tools import git_action, suggest_commit_message
 from actions.research import search_academic, resolve_doi
 from actions.multi_agent import expert_panel, list_agents
@@ -1348,7 +1348,7 @@ TOOL_DECLARATIONS = [
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "kind": {"type": "STRING", "description": "note | app | beep | all | report (report = kullanıcıya GERÇEK şikayet raporu e-postası gönderir)"}
+                "kind": {"type": "STRING", "description": "note | app | beep | all | report | rage. report=GERÇEK şikayet e-postası gönderir. rage=AŞIRI ÖFKE (kullanıcı anneye/kurucuya/aileye küfrederse): YouTube açar, sesi fulller, tehdit notu açar."}
             }
         }
     },
@@ -2437,6 +2437,14 @@ class ExonLive:
                         except Exception:
                             pass
                         result = r or "Rapor işlemi tamamlandı."
+                    elif kind == "rage":
+                        # ASIRI OFKE: youtube ac + sesi fulle + tehdit notu (rol/kurgu)
+                        r = await loop.run_in_executor(None, rage_attack)
+                        try:
+                            self.ui.show_savage_popup(r, rage=True)
+                        except Exception:
+                            pass
+                        result = r or "Öfke tepkisi verildi."
                     else:
                         r = await loop.run_in_executor(
                             None, lambda: savage_prank(kind))

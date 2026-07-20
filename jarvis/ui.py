@@ -1560,8 +1560,9 @@ class ExonUI:
     def play_error_sfx(self):
         self.root.after(0, self.sound.play_error)
 
-    def show_savage_popup(self, message: str):
-        """Savage modda kızgınken ekrana DRAMATIK, sarsılan tehditkar pop-up + alarm."""
+    def show_savage_popup(self, message: str, rage: bool = False):
+        """Savage modda kızgınken ekrana DRAMATIK, sarsılan tehditkar pop-up + alarm.
+        rage=True ise aşırı öfke: daha büyük, daha çok titreyen, birden fazla pop-up."""
         def _open():
             try:
                 self.sound.play_error()  # alarm/uyari sesi
@@ -1570,7 +1571,8 @@ class ExonUI:
             try:
                 import random as _r
                 win = tk.Toplevel(self.root)
-                win.title("⚠ EXON ÇOK KIZGIN ⚠")
+                title_txt = "☠  EXON KONTROLDEN ÇIKTI  ☠" if rage else "⚠  EXON ÇOK KIZGIN  ⚠"
+                win.title(title_txt)
                 win.configure(bg="#12020a")
                 win.attributes("-topmost", True)
                 try:
@@ -1578,19 +1580,18 @@ class ExonUI:
                 except Exception:
                     pass
                 win.lift()
-                w, h = 500, 250
+                w, h = (600, 300) if rage else (500, 250)
                 sw = self.root.winfo_screenwidth()
                 sh = self.root.winfo_screenheight()
                 cx = (sw - w) // 2
                 cy = (sh - h) // 2
                 win.geometry(f"{w}x{h}+{cx}+{cy}")
                 cv = tk.Canvas(win, width=w, height=h, bg="#12020a",
-                               highlightthickness=3, highlightbackground=C_RED)
+                               highlightthickness=4 if rage else 3, highlightbackground=C_RED)
                 cv.pack(fill="both", expand=True)
-                cv.create_text(w//2+2, 46, text="⚠  EXON ÇOK KIZGIN  ⚠",
-                               fill="#5a0010", font=font_display(22))
-                cv.create_text(w//2, 44, text="⚠  EXON ÇOK KIZGIN  ⚠",
-                               fill=C_RED, font=font_display(22))
+                tfont = font_display(26 if rage else 22)
+                cv.create_text(w//2+2, 48, text=title_txt, fill="#5a0010", font=tfont)
+                cv.create_text(w//2, 46, text=title_txt, fill=C_RED, font=tfont)
                 import textwrap
                 lines = textwrap.wrap(message, width=46) or [message]
                 yy = 96
@@ -1602,17 +1603,19 @@ class ExonUI:
                           font=font_body_bold(11), borderwidth=0,
                           padx=18, pady=8, cursor="hand2").place(relx=0.5, y=h-34, anchor="center")
 
-                # Sarsinti (shake) animasyonu — pencere birkaç saniye titrer
+                # Sarsinti (shake) animasyonu — rage'de daha uzun ve şiddetli
+                amp = 16 if rage else 9
+                max_shake = 60 if rage else 22
                 shakes = {"n": 0}
                 def _shake():
-                    if shakes["n"] > 22 or not win.winfo_exists():
+                    if shakes["n"] > max_shake or not win.winfo_exists():
                         try:
                             win.geometry(f"{w}x{h}+{cx}+{cy}")
                         except Exception:
                             pass
                         return
-                    dx = _r.randint(-9, 9)
-                    dy = _r.randint(-7, 7)
+                    dx = _r.randint(-amp, amp)
+                    dy = _r.randint(-amp, amp)
                     try:
                         win.geometry(f"{w}x{h}+{cx+dx}+{cy+dy}")
                     except Exception:
@@ -1620,7 +1623,8 @@ class ExonUI:
                     shakes["n"] += 1
                     win.after(45, _shake)
                 _shake()
-                win.after(9000, lambda: win.winfo_exists() and win.destroy())
+                win.after(11000 if rage else 9000,
+                          lambda: win.winfo_exists() and win.destroy())
             except Exception:
                 pass
         self.root.after(0, _open)
