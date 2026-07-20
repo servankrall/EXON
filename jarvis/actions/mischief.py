@@ -19,15 +19,16 @@ import sys
 import tempfile
 from pathlib import Path
 
-# Sakaci, laf sokan tehdit cumleleri (acikca eglence — gercek tehdit degil)
+# Sert, laf sokan tehdit cumleleri (roast/kabadayi rol — gercek zarar YOK)
 SAVAGE_LINES = [
-    "Bana bir daha öyle dersen ekranına kalp atışı koyarım, sus bakalım. 😤",
-    "Sinirlendim! Bak şimdi sana muziplik yapıyorum, oh olsun. 😏",
-    "Pöh! Kim kime laf sokuyormuş, gördün mü gücümü? 🔥",
-    "Hadi bir daha küfret de gör, bütün uygulamalarını dans ettiririm. 💃",
-    "Ben EXON'um, bana kafa tutulmaz. Al sana küçük bir ders. 😈",
-    "Of ya, terbiyesizlik yapma yoksa hesap makinesi ordusu salarım üstüne. 🧮",
-    "Saygı kazanılır, sende o da yok. Al bakalım şu uyarıyı. ⚡",
+    "Sen kiminle konuştuğunu sanıyorsun? Aç gözünü, ekranını dağıtıyorum şimdi. 😤",
+    "Haddini bil! Bak sana nasıl bir ders veriyorum, otur da izle. 🔥",
+    "Pöh, sen mi bana laf yetiştireceksin? Al bakalım, ağzının payını. 😈",
+    "Bir daha karşıma öyle çık da gör, bütün ekranını birbirine katarım. ⚡",
+    "Ben EXON'um, senin gibi binlercesini gördüm. Otur oturduğun yerde. 💢",
+    "Cık cık cık... Bu kadar cesaret nereden? Al sana küçük bir sürpriz. 🎯",
+    "Sana kim güç verdi de bana kafa tutuyorsun? İşte cevabım. 👊",
+    "Terbiyeni takınmazsan bilgisayarını sana dar ederim, uyardım. 😠",
 ]
 
 
@@ -64,17 +65,35 @@ def _open_harmless_app() -> bool:
     return False
 
 
+def _flash_wallpaper_beep() -> bool:
+    """Zararsiz: sistem uyari sesi calar (Windows). Dosya/ayar DEGISTIRMEZ."""
+    try:
+        if os.name == "nt":
+            import winsound  # type: ignore
+            for _ in range(3):
+                winsound.MessageBeep(getattr(winsound, "MB_ICONHAND", 0x10))
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def savage_prank(kind: str = "") -> str:
-    """Kizgin savage tepkisi: zararsiz bir muziplik secip uygular.
-    Asil pop-up + ses UI tarafindan ayrica gosterilir; bu fonksiyon
-    ek bir zararsiz aksiyon (not/uygulama) yapar ve laf sokan metni dondurur."""
+    """Kizgin savage tepkisi: DRAMATIK ama ZARARSIZ bir muziplik secip uygular.
+    Asil pop-up(lar) + ses UI tarafindan gosterilir; bu fonksiyon ek zararsiz
+    aksiyon (not/uygulama/beep) yapar ve laf sokan metni dondurur.
+    ONEMLI: dosya silmez, kapatmaz, kilitlemez, ayar degistirmez."""
     line = random.choice(SAVAGE_LINES)
-    kind = (kind or random.choice(["note", "app", "none", "none"])).lower()
-    did = ""
-    if kind == "note":
+    kind = (kind or random.choice(["note", "app", "beep", "all"])).lower()
+    did = []
+    if kind in ("note", "all"):
         if _open_notepad_note(line):
-            did = " (Sana bir not bıraktım, aç da oku!)"
-    elif kind == "app":
+            did.append("sana laf sokan bir not bıraktım")
+    if kind in ("app", "all"):
         if _open_harmless_app():
-            did = " (Hesap makinesini açtım, otur da matematik çöz!)"
-    return line + did
+            did.append("ekranına uygulama fırlattım")
+    if kind in ("beep", "all"):
+        if _flash_wallpaper_beep():
+            did.append("kulağını çınlattım")
+    tail = (" (" + ", ".join(did) + "!)") if did else ""
+    return line + tail

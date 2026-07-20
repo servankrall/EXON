@@ -1561,43 +1561,66 @@ class ExonUI:
         self.root.after(0, self.sound.play_error)
 
     def show_savage_popup(self, message: str):
-        """Savage modda kızgınken ekrana şakacı-tehditkar bir pop-up + alarm."""
+        """Savage modda kızgınken ekrana DRAMATIK, sarsılan tehditkar pop-up + alarm."""
         def _open():
             try:
                 self.sound.play_error()  # alarm/uyari sesi
             except Exception:
                 pass
             try:
+                import random as _r
                 win = tk.Toplevel(self.root)
-                win.title("⚠ EXON KIZGIN")
-                win.configure(bg="#1a0307")
+                win.title("⚠ EXON ÇOK KIZGIN ⚠")
+                win.configure(bg="#12020a")
                 win.attributes("-topmost", True)
+                try:
+                    win.overrideredirect(True)  # çerçevesiz, daha rahatsız edici
+                except Exception:
+                    pass
                 win.lift()
-                w, h = 460, 230
+                w, h = 500, 250
                 sw = self.root.winfo_screenwidth()
                 sh = self.root.winfo_screenheight()
-                # ekranda hafif rastgele/sarsintili konum (muziplik hissi)
-                import random as _r
-                x = (sw - w) // 2 + _r.randint(-60, 60)
-                y = (sh - h) // 2 + _r.randint(-40, 40)
-                win.geometry(f"{w}x{h}+{max(0,x)}+{max(0,y)}")
-                cv = tk.Canvas(win, width=w, height=h, bg="#1a0307",
-                               highlightthickness=2, highlightbackground=C_RED)
+                cx = (sw - w) // 2
+                cy = (sh - h) // 2
+                win.geometry(f"{w}x{h}+{cx}+{cy}")
+                cv = tk.Canvas(win, width=w, height=h, bg="#12020a",
+                               highlightthickness=3, highlightbackground=C_RED)
                 cv.pack(fill="both", expand=True)
-                cv.create_text(w//2, 42, text="⚠  EXON KIZGIN  ⚠",
-                               fill=C_RED, font=font_display(20))
-                # mesajı sığacak şekilde böl
+                cv.create_text(w//2+2, 46, text="⚠  EXON ÇOK KIZGIN  ⚠",
+                               fill="#5a0010", font=font_display(22))
+                cv.create_text(w//2, 44, text="⚠  EXON ÇOK KIZGIN  ⚠",
+                               fill=C_RED, font=font_display(22))
                 import textwrap
-                lines = textwrap.wrap(message, width=44) or [message]
-                yy = 92
+                lines = textwrap.wrap(message, width=46) or [message]
+                yy = 96
                 for ln in lines[:4]:
-                    cv.create_text(w//2, yy, text=ln, fill="#ffd0d0", font=font_body(12))
-                    yy += 24
+                    cv.create_text(w//2, yy, text=ln, fill="#ffcccc", font=font_body(13))
+                    yy += 26
                 tk.Button(win, text="TAMAM, ÖZÜR DİLERİM 😅", command=win.destroy,
                           fg=C_BG, bg=C_RED, activebackground="#ff7a8a",
                           font=font_body_bold(11), borderwidth=0,
                           padx=18, pady=8, cursor="hand2").place(relx=0.5, y=h-34, anchor="center")
-                win.after(9000, win.destroy)  # 9 sn sonra otomatik kapan
+
+                # Sarsinti (shake) animasyonu — pencere birkaç saniye titrer
+                shakes = {"n": 0}
+                def _shake():
+                    if shakes["n"] > 22 or not win.winfo_exists():
+                        try:
+                            win.geometry(f"{w}x{h}+{cx}+{cy}")
+                        except Exception:
+                            pass
+                        return
+                    dx = _r.randint(-9, 9)
+                    dy = _r.randint(-7, 7)
+                    try:
+                        win.geometry(f"{w}x{h}+{cx+dx}+{cy+dy}")
+                    except Exception:
+                        return
+                    shakes["n"] += 1
+                    win.after(45, _shake)
+                _shake()
+                win.after(9000, lambda: win.winfo_exists() and win.destroy())
             except Exception:
                 pass
         self.root.after(0, _open)
