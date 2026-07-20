@@ -1303,10 +1303,14 @@ class ExonUI:
             from actions.emotion import ENGINE
             on = ENGINE.is_enabled()
             savage = ENGINE.is_savage()
+            love = ENGINE.is_love()
             cur = ENGINE.current()
         except Exception:
-            on, savage, cur = False, False, {"emoji": ""}
-        if on and savage:
+            on, savage, love, cur = False, False, False, {"emoji": ""}
+        if on and love:
+            self._plus_btn.configure(text=cur.get("emoji", "💕") or "💕",
+                                     fg=C_BG, bg="#ff69b4", highlightbackground="#ff69b4")
+        elif on and savage:
             self._plus_btn.configure(text=cur.get("emoji", "🔥") or "🔥",
                                      fg=C_BG, bg=C_RED, highlightbackground=C_RED)
         elif on:
@@ -1357,6 +1361,10 @@ class ExonUI:
         pro_label = "🔥  Duygu Modu PRO — Savage" + ("" if pro else "  🔒")
         items.append((pro_label, C_GOLD, lambda: self._pick_emotion_mode(True)))
 
+        # Aşk / Romantik mod
+        love_label = "💕  Aşk Modu — romantik & tatlı" + ("" if pro else "  🔒")
+        items.append((love_label, "#ff69b4", lambda: self._pick_emotion_mode(False, love=True)))
+
         for i, (label, color, cmd) in enumerate(items):
             b = tk.Button(menu, text=label, command=cmd, cursor="hand2",
                           fg=color, bg="#081426", activebackground="#0e2440",
@@ -1395,11 +1403,11 @@ class ExonUI:
                 pass
             self._plus_menu = None
 
-    def _pick_emotion_mode(self, savage: bool):
+    def _pick_emotion_mode(self, savage: bool, love: bool = False):
         """Menüden bir mod seçildi."""
         self._close_plus_menu()
-        # PRO savage sadece Pro kullanıcıda
-        if savage:
+        # PRO modlar (savage + aşk) sadece Pro kullanıcıda
+        if savage or love:
             try:
                 from actions.license_manager import is_pro
                 if not is_pro():
@@ -1420,14 +1428,14 @@ class ExonUI:
                     self.write_log("SYS: " + msg)
             except Exception:
                 pass
-        self._set_emotion_mode(True, savage)
+        self._set_emotion_mode(True, savage, love)
 
-    def _set_emotion_mode(self, enable: bool, savage: bool):
+    def _set_emotion_mode(self, enable: bool, savage: bool, love: bool = False):
         try:
             from actions.emotion import ENGINE
             from actions.trial import end_emotion
             if enable:
-                ENGINE.set_enabled(True, savage=savage)
+                ENGINE.set_enabled(True, savage=savage, love=love)
             else:
                 ENGINE.set_enabled(False)
                 try:
@@ -1441,12 +1449,52 @@ class ExonUI:
         if enable:
             if savage:
                 self.write_log("SYS: 🔥 DUYGU MODU PRO (Savage) AÇILDI — EXON sana karşılık verecek!")
+            elif love:
+                self.write_log("SYS: 💕 AŞK MODU AÇILDI — EXON şimdi çok tatlı ve romantik!")
+                self.start_heart_rain()
             else:
                 self.write_log("SYS: ❤ Duygu Modu AÇILDI — EXON artık duygularını yansıtacak.")
         else:
             self.write_log("SYS: Duygu Modu kapatıldı.")
         if self.on_emotion_toggle:
             threading.Thread(target=self.on_emotion_toggle, args=(enable,), daemon=True).start()
+
+    def start_heart_rain(self, n: int = 14):
+        """Ekranda yukarı doğru süzülen kalp yağmuru efekti (aşk teması)."""
+        def _spawn():
+            try:
+                import random as _r
+                sw = self.root.winfo_screenwidth()
+                sh = self.root.winfo_screenheight()
+                for i in range(max(1, min(n, 24))):
+                    lbl = tk.Label(self.root, text=_r.choice(["💗", "💕", "❤️", "💖", "💘"]),
+                                   bg=C_BG, fg="#ff69b4", font=("Segoe UI Emoji", _r.randint(16, 34)))
+                    x = _r.randint(int(self.CHAT_X if hasattr(self, "CHAT_X") else 40),
+                                   max(60, self.W - 60))
+                    y = self.H - 40
+                    lbl.place(x=x, y=y)
+                    self._float_heart(lbl, x, y, _r.uniform(2.2, 4.5), i * 90)
+            except Exception:
+                pass
+        self.root.after(0, _spawn)
+
+    def _float_heart(self, lbl, x, y, speed, delay):
+        """Bir kalbi yukarı süzer, üstte yok eder."""
+        def _step(cy):
+            if cy < -40 or not lbl.winfo_exists():
+                try:
+                    lbl.destroy()
+                except Exception:
+                    pass
+                return
+            import math as _m
+            nx = x + int(14 * _m.sin(cy * 0.03))
+            try:
+                lbl.place(x=nx, y=int(cy))
+            except Exception:
+                return
+            self.root.after(30, lambda: _step(cy - speed * 3))
+        self.root.after(max(0, delay), lambda: _step(y))
 
     def _place_layout_widgets(self):
         self.log_frame.place(x=self.CHAT_X, y=self.CHAT_Y,
@@ -2462,6 +2510,17 @@ class ExonUI:
                 for hx in (FCX-int(hr*0.7), FCX+int(hr*0.7)):
                     c.create_text(hx, fy-int(hr*0.45), text="♥",
                                   fill=self._ac(255, 130, 180, 220), font=font_display(13))
+                (mouth_anim or (lambda: mouth_smile(big=True)))()
+            elif emo == "romantik":
+                # KALP GÖZLER + yanan yanaklar + tatlı gülüş
+                pink = self._ac(255, 105, 180, 255)
+                for cx in (lx, rx):
+                    c.create_text(cx, ey, text="♥", fill=pink, font=font_display(int(ew*1.7)))
+                # pembe yanak
+                for cxk in (FCX-int(hr*0.5), FCX+int(hr*0.5)):
+                    c.create_oval(cxk-int(hr*0.12), my-int(hr*0.18),
+                                  cxk+int(hr*0.12), my-int(hr*0.02),
+                                  fill=self._ac(255, 120, 170, 90), outline="")
                 (mouth_anim or (lambda: mouth_smile(big=True)))()
             else:
                 eye_full(lx); eye_full(rx); mouth_smile()

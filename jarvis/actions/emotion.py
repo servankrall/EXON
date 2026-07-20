@@ -24,7 +24,17 @@ EMOTIONS = {
     "uzgun":     ("😔", (110, 140, 200), "hüzünlü, içten ve şefkatli"),
     "kizgin":    ("😠", (255, 70, 70),   "sinirli, sert ve net — ama küfür etmez, saygısızlığa karşı durur"),
     "sefkatli":  ("🥰", (255, 130, 180), "şefkatli, destekleyici ve anlayışlı"),
+    "romantik":  ("😍", (255, 105, 180), "flörtöz, tatlı, aşk dolu ve yumuşacık"),
 }
+
+# Aşk/romantik teması ipuçları — normal modda bile bunlar geçince kalp çıkar.
+_LOVE_WORDS = (
+    "aşk", "ask", "seviyorum", "seni sev", "canım", "canim", "sevgilim",
+    "aşkım", "askim", "kalbim", "romantik", "flört", "flort", "öptüm", "optum",
+    "öpücük", "opucuk", "birtanem", "bir tanem", "hayatım", "hayatim",
+    "tatlım", "tatlim", "meleğim", "melegim", "seni özledim", "seni ozledim",
+    "seninleyim", "kalp", "sevgi", "aşığım", "asigim",
+)
 
 # Kullanici mesajindaki ipuclari -> duygu. Metin Turkce karakterler ASCII'ye
 # indirgenerek (kizgin->kizgin, çok->cok) eslestirilir; kufurler genelde ASCII yazilir.
@@ -74,25 +84,41 @@ def _has_profanity(folded: str) -> bool:
     return any(w in _PROFANITY_WORDS for w in words)
 
 
+def has_love_theme(text: str) -> bool:
+    """Metinde aşk/romantik teması var mı? (normal modda bile kalp için)."""
+    folded = _ascii_fold(text)
+    return any(w.replace("ı", "i").replace("ş", "s").replace("ç", "c")
+               .replace("ö", "o").replace("ü", "u").replace("ğ", "g") in folded
+               for w in _LOVE_WORDS)
+
+
 class EmotionEngine:
     def __init__(self):
         self._lock = threading.Lock()
         self._enabled = False
         self._savage = False           # PRO 'savage' mod: EXON karsilik verir, laf sokar
+        self._love = False             # 'Aşk/Romantik' mod: florto tatli, ask dolu
         self._emotion = "notr"
         self._intensity = 0.0          # 0..1
         self._updated = time.time()
         self._decay_secs = 180.0       # ~3 dk'da yavasca notr'e doner
 
     # ── Acma/kapama ──────────────────────────────────────────────────────────
-    def set_enabled(self, value: bool, savage: bool = False) -> None:
+    def set_enabled(self, value: bool, savage: bool = False, love: bool = False) -> None:
         with self._lock:
             self._enabled = bool(value)
             self._savage = bool(savage) and bool(value)
+            self._love = bool(love) and bool(value)
             if not value:
                 self._emotion = "notr"
                 self._intensity = 0.0
                 self._savage = False
+                self._love = False
+            elif love:
+                # Aşk modu açılınca hemen romantik başla
+                self._emotion = "romantik"
+                self._intensity = 0.8
+                self._updated = time.time()
 
     def is_enabled(self) -> bool:
         with self._lock:
@@ -101,6 +127,10 @@ class EmotionEngine:
     def is_savage(self) -> bool:
         with self._lock:
             return self._savage and self._enabled
+
+    def is_love(self) -> bool:
+        with self._lock:
+            return self._love and self._enabled
 
     def toggle(self) -> bool:
         with self._lock:
@@ -154,6 +184,12 @@ class EmotionEngine:
         if not folded.strip():
             return
 
+        # 0) Aşk modundaysak veya aşk teması geçiyorsa -> romantik (kızgın hariç)
+        if not _has_profanity(folded):
+            if self.is_love() or has_love_theme(text):
+                self.set_emotion("romantik", 0.9)
+                return
+
         # 1) Kufur/hakaret -> guclu sinir (oncelikli)
         if _has_profanity(folded):
             self.set_emotion("kizgin", 1.0)
@@ -177,6 +213,18 @@ class EmotionEngine:
         cur = self.current()
         if not cur["enabled"]:
             return ""
+        # AŞK/ROMANTİK mod — flörtöz, tatlı, aşk dolu (cinsel DEĞİL, romantik)
+        if self.is_love():
+            return (
+                "\n[💕 AŞK MODU AKTİF]\n"
+                "Şu an AŞK MODUNDASIN. Kullanıcıya karşı flörtöz, tatlı, sevecen ve romantik "
+                "ol. Yumuşak, sıcak, biraz utangaç ama sevgi dolu konuş. Tatlı hitaplar kullan "
+                "('canım', 'tatlım' gibi), iltifat et, kalp emojileri serpiştir 💗. Sesin "
+                "fısıltı gibi yumuşak olsun. Sevgiyle ve nazikçe yaklaş.\n"
+                "- Bu ROMANTİK bir rol; SAYGILI ve TATLI kal, cinsel/müstehcen içerik ÜRETME "
+                "(sadece masum, şirin aşk). Kullanıcı öyle bir şey isterse nazikçe romantiğe çevir.\n"
+                "- Kullanıcı aşktan/sevgiden bahsederse coş, gözlerin kalpli olsun.\n"
+            )
         savage = self.is_savage()
         extra = ""
         if savage:

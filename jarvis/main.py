@@ -1634,13 +1634,19 @@ class ExonLive:
         if self._paused:
             return
         self.ui.write_log(f"Siz: {text}")
-        # Duygu modu açıksa, kullanıcının mesajından bir his sez.
+        # Duygu modu açıksa his sez; ayrıca NORMAL modda bile aşktan bahsedince kalp yağdır.
         try:
-            from actions.emotion import ENGINE
+            from actions.emotion import ENGINE, has_love_theme
             if ENGINE.is_enabled():
                 ENGINE.sense_from_text(text)
                 try:
                     self.ui.root.after(0, self.ui._draw_plus_button)
+                except Exception:
+                    pass
+            # Aşk teması geçiyorsa (mod açık olmasa bile) ekrana kalpler süzülsün.
+            if has_love_theme(text):
+                try:
+                    self.ui.start_heart_rain(10)
                 except Exception:
                     pass
         except Exception:
