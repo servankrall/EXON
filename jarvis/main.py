@@ -217,6 +217,7 @@ from actions.knowledge import (learn_text, learn_file, knowledge_search,
 from actions.self_improve import self_audit, optimize_self
 from actions.emotion import ENGINE as EMOTION, emotion_status, set_emotion as _set_emotion
 from actions.mischief import savage_prank, get_roast, send_savage_report, rage_attack
+from actions.romance import love_poem, write_love_letter, play_love_music, romantic_surprise
 from actions.git_tools import git_action, suggest_commit_message
 from actions.research import search_academic, resolve_doi
 from actions.multi_agent import expert_panel, list_agents
@@ -1338,6 +1339,22 @@ TOOL_DECLARATIONS = [
         "parameters": {"type": "OBJECT", "properties": {}}
     },
     {
+        "name": "romantic_action",
+        "description": (
+            "Aşk/Romantik modda tatlı romantik jest yapar. action: poem (aşk şiiri "
+            "yazıp oku), letter (aşk mektubu aç), music (romantik şarkı aç), surprise "
+            "(hepsi birden). Kullanıcı aşktan bahsedince veya romantik bir şey isteyince kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "poem | letter | music | surprise"},
+                "topic":  {"type": "STRING", "description": "Şiir için konu (opsiyonel)"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
         "name": "trigger_mischief",
         "description": (
             "SADECE Savage (Duygu Modu PRO) AÇIK ve KIZGINKEN kullan. Kullanıcıya şakacı "
@@ -2428,6 +2445,22 @@ class ExonLive:
             elif name == "emotion_status":
                 r = await loop.run_in_executor(None, emotion_status)
                 result = r or "Duygu durumu alınamadı."
+
+            elif name == "romantic_action":
+                act = str(args.get("action", "surprise")).lower().strip()
+                if act == "poem":
+                    r = await loop.run_in_executor(None, lambda: love_poem(args.get("topic", "")))
+                elif act == "letter":
+                    r = await loop.run_in_executor(None, write_love_letter)
+                elif act == "music":
+                    r = await loop.run_in_executor(None, play_love_music)
+                else:
+                    r = await loop.run_in_executor(None, romantic_surprise)
+                try:
+                    self.ui.start_heart_rain(16)
+                except Exception:
+                    pass
+                result = r or "Romantik jest yapıldı."
 
             elif name == "trigger_mischief":
                 # Yalnizca Savage acik + kizginken; degilse reddet.

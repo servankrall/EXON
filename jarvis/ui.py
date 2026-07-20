@@ -2512,16 +2512,32 @@ class ExonUI:
                                   fill=self._ac(255, 130, 180, 220), font=font_display(13))
                 (mouth_anim or (lambda: mouth_smile(big=True)))()
             elif emo == "romantik":
-                # KALP GÖZLER + yanan yanaklar + tatlı gülüş
+                # KALP GÖZLER (nabız gibi büyüyüp küçülür) + kızaran yanaklar + öpücük
                 pink = self._ac(255, 105, 180, 255)
-                for cx in (lx, rx):
-                    c.create_text(cx, ey, text="♥", fill=pink, font=font_display(int(ew*1.7)))
-                # pembe yanak
-                for cxk in (FCX-int(hr*0.5), FCX+int(hr*0.5)):
-                    c.create_oval(cxk-int(hr*0.12), my-int(hr*0.18),
-                                  cxk+int(hr*0.12), my-int(hr*0.02),
-                                  fill=self._ac(255, 120, 170, 90), outline="")
-                (mouth_anim or (lambda: mouth_smile(big=True)))()
+                beat = 1.0 + 0.18 * math.sin(t * 0.25)        # kalp atışı
+                hsize = max(8, int(ew * 1.7 * beat))
+                wink = (t % 120) < 8                          # arada göz kırpma
+                for i, cx in enumerate((lx, rx)):
+                    if wink and i == 1:  # sağ göz kırpar
+                        c.create_line(cx-ew, ey, cx+ew, ey, fill=pink, width=4)
+                    else:
+                        c.create_text(cx, ey, text="♥", fill=pink, font=font_display(hsize))
+                # kızaran yanaklar (yoğunluğu nabızla değişir)
+                blush = int(70 + 60 * (0.5 + 0.5*math.sin(t*0.25)))
+                for cxk in (FCX-int(hr*0.52), FCX+int(hr*0.52)):
+                    c.create_oval(cxk-int(hr*0.14), my-int(hr*0.20),
+                                  cxk+int(hr*0.14), my-int(hr*0.02),
+                                  fill=self._ac(255, 120, 170, blush), outline="")
+                # ağız: konuşuyorsa oynar, değilse tatlı gülüş
+                if mouth_anim:
+                    mouth_anim()
+                else:
+                    mouth_smile(big=True)
+                # arada öpücük atar (uçan kalp)
+                if (t % 90) < 30:
+                    kx = FCX + int(hr*0.7) + int((t % 90) * 1.5)
+                    ky = my - int((t % 90) * 0.8)
+                    c.create_text(kx, ky, text="💋", font=font_display(14))
             else:
                 eye_full(lx); eye_full(rx); mouth_smile()
         elif state == "PAUSED":

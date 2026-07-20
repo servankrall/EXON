@@ -36,11 +36,12 @@ PRO_TOOLS = {
     "analyze_screen", "get_youtube_channel_report",
     "compose_text", "summarize_url", "summarize_document",
     "learn_file", "learn_text", "knowledge_query", "knowledge_search",
-    "analyze_video", "expert_panel",
+    "analyze_video", "expert_panel", "romantic_action",
 }
 
 PRO_FEATURES_TR = [
     "🔥 Duygu Modu PRO (Savage) — EXON sana karsilik verir, laf sokar",
+    "💕 Ask Modu — romantik, tatli, siir/mektup/muzik",
     "Sinirsiz duygu modu + sinirsiz gorsel yukleme",
     "Sinirsiz gorsel olusturma",
     "Sarki yazma & soyleme (ritimli, tonlu)",
