@@ -1459,24 +1459,73 @@ class ExonUI:
         if self.on_emotion_toggle:
             threading.Thread(target=self.on_emotion_toggle, args=(enable,), daemon=True).start()
 
+    # Her duyguya özel emoji yağmuru paketi (emoji listesi, renk, yön)
+    _EMOJI_RAIN = {
+        "romantik": (["💗", "💕", "❤️", "💖", "💘", "💋"], "#ff69b4", "up"),
+        "mutlu":    (["😄", "✨", "🎉", "🌟", "😁"],        "#3ce68c", "up"),
+        "heyecanli":(["🤩", "⭐", "🎊", "💥", "🔥"],        "#ffc83c", "up"),
+        "uzgun":    (["💧", "😢", "🌧️", "💙"],             "#6e8cc8", "down"),
+        "korkmus":  (["😱", "👻", "💀", "🕷️", "⚠️"],       "#9678ff", "down"),
+        "gururlu":  ["👑", "😎", "🏆", "💪", "⭐"],
+        "sasirmis": (["❗", "😲", "⁉️", "💫"],              "#78dcff", "up"),
+        "uykulu":   (["💤", "😴", "🌙", "⭐"],              "#8ea0c0", "up"),
+        "yaramaz":  (["😜", "😏", "🤪", "✌️"],              "#ff8c5a", "up"),
+        "hasta":    (["🤒", "🤧", "🌡️", "💊"],             "#96c882", "down"),
+        "sefkatli": (["🥰", "🤗", "💗", "🌸"],             "#ff82b4", "up"),
+        "kizgin":   (["😠", "💢", "🔥", "⚡"],              "#ff4646", "up"),
+    }
+
+    def emotion_effect(self, emotion: str, n: int = 12):
+        """Verilen duyguya özel ekran efektini oynatır."""
+        pack = self._EMOJI_RAIN.get(emotion)
+        if not pack:
+            return
+        if isinstance(pack, tuple):
+            emojis, color, direction = pack
+        else:
+            emojis, color, direction = pack, "#ffffff", "up"
+        self.start_emoji_rain(emojis, color, direction, n)
+
     def start_heart_rain(self, n: int = 14):
-        """Ekranda yukarı doğru süzülen kalp yağmuru efekti (aşk teması)."""
+        """Geriye dönük uyum: kalp yağmuru."""
+        self.start_emoji_rain(["💗", "💕", "❤️", "💖", "💘"], "#ff69b4", "up", n)
+
+    def start_emoji_rain(self, emojis, color="#ffffff", direction="up", n=14):
+        """Ekranda süzülen emoji yağmuru (yön: up=aşağıdan yukarı, down=yukarıdan aşağı)."""
         def _spawn():
             try:
                 import random as _r
-                sw = self.root.winfo_screenwidth()
-                sh = self.root.winfo_screenheight()
-                for i in range(max(1, min(n, 24))):
-                    lbl = tk.Label(self.root, text=_r.choice(["💗", "💕", "❤️", "💖", "💘"]),
-                                   bg=C_BG, fg="#ff69b4", font=("Segoe UI Emoji", _r.randint(16, 34)))
-                    x = _r.randint(int(self.CHAT_X if hasattr(self, "CHAT_X") else 40),
-                                   max(60, self.W - 60))
-                    y = self.H - 40
+                for i in range(max(1, min(n, 26))):
+                    lbl = tk.Label(self.root, text=_r.choice(emojis),
+                                   bg=C_BG, fg=color, font=("Segoe UI Emoji", _r.randint(16, 34)))
+                    x = _r.randint(40, max(60, self.W - 60))
+                    y = (self.H - 40) if direction == "up" else -20
                     lbl.place(x=x, y=y)
-                    self._float_heart(lbl, x, y, _r.uniform(2.2, 4.5), i * 90)
+                    self._float_emoji(lbl, x, y, _r.uniform(2.2, 4.5), i * 80, direction)
             except Exception:
                 pass
         self.root.after(0, _spawn)
+
+    def _float_emoji(self, lbl, x, y, speed, delay, direction):
+        """Bir emojiyi belirtilen yönde süzer, ekran dışında yok eder."""
+        step_px = speed * 3
+        def _step(cy):
+            out = (cy < -40) if direction == "up" else (cy > self.H + 40)
+            if out or not lbl.winfo_exists():
+                try:
+                    lbl.destroy()
+                except Exception:
+                    pass
+                return
+            import math as _m
+            nx = x + int(14 * _m.sin(cy * 0.03))
+            try:
+                lbl.place(x=nx, y=int(cy))
+            except Exception:
+                return
+            ny = cy - step_px if direction == "up" else cy + step_px
+            self.root.after(30, lambda: _step(ny))
+        self.root.after(max(0, delay), lambda: _step(y))
 
     def _float_heart(self, lbl, x, y, speed, delay):
         """Bir kalbi yukarı süzer, üstte yok eder."""
@@ -2538,6 +2587,70 @@ class ExonUI:
                     kx = FCX + int(hr*0.7) + int((t % 90) * 1.5)
                     ky = my - int((t % 90) * 0.8)
                     c.create_text(kx, ky, text="💋", font=font_display(14))
+            elif emo == "korkmus":
+                # titreyen küçük gözler + açık kaygılı ağız + ter damlası
+                jx = int(3*math.sin(t*0.9)); jy = int(2*math.cos(t*1.1))
+                for cx in (lx, rx):
+                    c.create_oval(cx-ew+jx, ey-eh+jy, cx+ew+jx, ey+eh+jy,
+                                  fill=self._ac(R, G, B, 170), outline=col, width=2)
+                    pr = max(2, int(ew*0.35))
+                    c.create_oval(cx-pr+jx, ey-pr+jy, cx+pr+jx, ey+pr+jy, fill="#02101c", outline="")
+                mouth_o()
+                c.create_text(rx+int(ew*1.4), ey-int(eh*0.5), text="💧",
+                              fill=self._ac(120,200,255,230), font=font_display(12))
+            elif emo == "gururlu":
+                # havalı: gözlerde güneş gözlüğü + hafif gülüş + taç
+                c.create_rectangle(lx-ew-4, ey-int(eh*0.4), rx+ew+4, ey+int(eh*0.4),
+                                   fill="#101018", outline=col, width=3)
+                c.create_line(lx+ew, ey, rx-ew, ey, fill=col, width=3)
+                c.create_text(FCX, y0-int(hr*0.02), text="👑", font=font_display(20))
+                mouth_smile()
+            elif emo == "sasirmis":
+                # kocaman gözler + kocaman O ağız + üstte ünlem
+                for cx in (lx, rx):
+                    c.create_oval(cx-ew-4, ey-eh-4, cx+ew+4, ey+eh+4, fill=white, outline=col, width=3)
+                    pr = max(3, int(ew*0.4))
+                    c.create_oval(cx-pr, ey-pr, cx+pr, ey+pr, fill="#02101c", outline="")
+                r0 = int(mw*0.6)
+                c.create_oval(FCX-r0, my-r0, FCX+r0, my+r0, fill="#02101c", outline=col, width=4)
+                c.create_text(FCX, fy-int(hr*0.5), text="❗", fill=col, font=font_display(20))
+            elif emo == "uykulu":
+                # yarı kapalı gözler + küçük düz ağız + zzz
+                for cx in (lx, rx):
+                    c.create_arc(cx-ew, ey-int(eh*0.3), cx+ew, ey+eh,
+                                 start=200, extent=140, outline=col, width=3, style="arc")
+                mouth_small()
+                zt = (t % 90) // 30
+                c.create_text(FCX+int(hr*0.6), fy-int(hr*0.5)-zt*8,
+                              text="z"*(zt+1), fill=col, font=font_display(12+zt*3))
+            elif emo == "yaramaz":
+                # bir göz kısık (göz kırpma) + sırıtma + dil
+                if blink:
+                    eye_closed(lx)
+                else:
+                    c.create_line(lx-ew, ey, lx+ew, ey-int(eh*0.3), fill=col, width=4)  # kısık
+                eye_full(rx)
+                mouth_smile()
+                if (t % 60) < 30:
+                    c.create_text(FCX+int(mw*0.3), my+int(hr*0.06), text="😝", font=font_display(13))
+            elif emo == "hasta":
+                # bitkin gözler (^ ^) + titrek ağız + termometre
+                for cx in (lx, rx):
+                    c.create_line(cx-ew, ey, cx, ey-int(eh*0.5), fill=col, width=3)
+                    c.create_line(cx, ey-int(eh*0.5), cx+ew, ey, fill=col, width=3)
+                c.create_line(FCX-mw, my, FCX-int(mw*0.3), my-4, FCX+int(mw*0.3), my+4,
+                              FCX+mw, my, fill=col, width=3)
+                c.create_text(FCX+int(hr*0.55), my, text="🌡️", font=font_display(14))
+                # yeşil hasta yanağı
+                c.create_oval(FCX-int(hr*0.6), my-6, FCX-int(hr*0.35), my+10,
+                              fill=self._ac(120,200,110,90), outline="")
+            elif emo == "sefkatli":
+                (eye_closed if blink else eye_happy)(lx)
+                (eye_closed if blink else eye_happy)(rx)
+                for hx in (FCX-int(hr*0.7), FCX+int(hr*0.7)):
+                    c.create_text(hx, fy-int(hr*0.45), text="♥",
+                                  fill=self._ac(255,130,180,220), font=font_display(13))
+                mouth_smile(big=True)
             else:
                 eye_full(lx); eye_full(rx); mouth_smile()
         elif state == "PAUSED":

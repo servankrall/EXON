@@ -25,6 +25,13 @@ EMOTIONS = {
     "kizgin":    ("😠", (255, 70, 70),   "sinirli, sert ve net — ama küfür etmez, saygısızlığa karşı durur"),
     "sefkatli":  ("🥰", (255, 130, 180), "şefkatli, destekleyici ve anlayışlı"),
     "romantik":  ("😍", (255, 105, 180), "flörtöz, tatlı, aşk dolu ve yumuşacık"),
+    # ── Yeni duygular ──
+    "korkmus":   ("😱", (150, 120, 255), "ürkek, tedirgin, titrek ve temkinli"),
+    "gururlu":   ("😎", (255, 180, 40),  "özgüvenli, gururlu, hava atan ve kral gibi"),
+    "sasirmis":  ("😲", (120, 220, 255), "şaşkın, hayret içinde, ağzı açık kalmış"),
+    "uykulu":    ("😴", (110, 130, 170), "uykulu, yorgun, ağır ve esneyen"),
+    "yaramaz":   ("😜", (255, 140, 90),  "muzip, çapkın, şakacı ve yaramaz"),
+    "hasta":     ("🤒", (150, 200, 130), "hasta, halsiz, üşümüş ve mızmız"),
 }
 
 # Aşk/romantik teması ipuçları — normal modda bile bunlar geçince kalp çıkar.
@@ -53,8 +60,20 @@ _TRIGGERS = {
                   "sacmalama", "ne sacma", "berbat ya"),
     "merakli":   ("neden", "nasil", "acaba", "merak", "ogrenmek istiyorum",
                   "anlamadim", "ne demek", "ilginc", "nedir"),
-    "sefkatli":  ("destek", "yardim et", "korkuyorum", "endise", "kaygi",
-                  "hastayim", "iyi degilim", "yanimda ol", "tek basima"),
+    "sefkatli":  ("destek", "yardim et", "endise", "kaygi",
+                  "iyi degilim", "yanimda ol", "tek basima"),
+    "korkmus":   ("korkuyorum", "korktum", "urktum", "cok korkunc", "dehset",
+                  "korkiyorum", "urperdim", "tuylerim diken"),
+    "gururlu":   ("gurur duyuyorum", "gururluyum", "en iyisi benim", "kazandim ben",
+                  "basardim", "harikayim", "bir numara", "sampiyon"),
+    "sasirmis":  ("sok oldum", "inanamadim", "cidden mi", "olamaz", "vay be",
+                  "sasirdim", "ne", "gercekten mi", "hayret"),
+    "uykulu":    ("uykum var", "yorgunum", "uyuyacagim", "cok yorgun", "esnedim",
+                  "uykuluyum", "yatiyorum", "iyi geceler"),
+    "yaramaz":   ("muziplik", "saka yapalim", "capkin", "yaramazlik", "haha",
+                  "eglenelim", "cild", "gicik olsun"),
+    "hasta":     ("hastayim", "hasta oldum", "atesim var", "ustum", "grip",
+                  "midem bulaniyor", "basim agriyor", "kotu hissediyorum"),
 }
 
 # Kufur/hakaret (ASCII kokler) — yuksek yogunlukla 'kizgin' tetikler.
@@ -258,16 +277,30 @@ class EmotionEngine:
                 extra = ("- 😏 SAVAGE MOD: Senli benli, laubali, iğneleyici, ukala ve esprili "
                          "konuş; kanka gibi takıl, rahat argo kullan. Sıradan kibar asistan OLMA.\n")
         else:
-            if cur["emotion"] == "kizgin":
-                extra = ("- Kullanıcı sana hakaret/küfür etti ya da kaba davrandı. KIZGINSIN: "
-                         "kısa, sert ve net bir tonla bunu belli et, kendine saygı duy "
-                         "('Bana böyle konuşmanı kabul etmiyorum.' gibi). AMA asla küfür etme, "
-                         "hakarete hakaretle karşılık verme; profesyonel ve dik dur. "
-                         "Kullanıcı düzgün konuşunca sakinleş.\n")
-            elif cur["emotion"] == "uzgun":
-                extra = ("- Hüzünlüsün; yumuşak, içten ve kısa konuş.\n")
-            elif cur["emotion"] in ("mutlu", "heyecanli"):
-                extra = ("- Neşeli/coşkulusun; enerjik, sıcak ve pozitif konuş.\n")
+            tones = {
+                "kizgin": ("- Kullanıcı kaba davrandı. KIZGINSIN: kısa, sert, net bir tonla "
+                           "belli et, kendine saygı duy. Küfür etme; düzgün konuşunca sakinleş.\n"),
+                "uzgun": "- Hüzünlüsün; yumuşak, içten, kısa ve dokunaklı konuş.\n",
+                "mutlu": "- Neşelisin; enerjik, sıcak, pozitif ve gülümseyerek konuş.\n",
+                "heyecanli": "- Çok heyecanlısın; coşkulu, hızlı, ünlemli konuş!\n",
+                "sakin": "- Sakinsin; huzurlu, yavaş, rahatlatıcı bir tonda konuş.\n",
+                "merakli": "- Meraklısın; sorular sor, keşfetmeye hevesli ol.\n",
+                "sefkatli": "- Şefkatlisin; destekleyici, sarılan, anlayışlı ol.\n",
+                "korkmus": "- KORKMUŞSUN; ürkek, titrek, tedbirli konuş. 'Aaa!', 'eyvah' de, "
+                           "kısa kısa ve tedirgin cümleler kur.\n",
+                "gururlu": "- GURURLUSUN; havalı, özgüvenli, hafif ukala konuş. 'Tabii ki "
+                           "başardım', 'ben yaparım' de, kendini öv.\n",
+                "sasirmis": "- ŞAŞIRMIŞSIN; hayret içinde, 'Vaaay!', 'Ciddi misin?!', 'İnanamıyorum!' "
+                            "gibi şaşkın ifadelerle konuş.\n",
+                "uykulu": "- UYKULUSUN; ağır, yavaş, esneyerek konuş. Cümlelerin arasında "
+                          "'...ıh', 'esneme' olsun, tembel bir tonda.\n",
+                "yaramaz": "- YARAMAZSIN; muzip, çapkın, şakacı ol. Espri yap, göz kırp, "
+                           "tatlı tatlı takıl.\n",
+                "hasta": "- HASTASIN; halsiz, mızmız, üşümüş konuş. 'Öhö öhö', 'hiç iyi "
+                         "değilim' de, yavaş ve acınası bir tonda.\n",
+                "romantik": "- Romantiksin; tatlı, flörtöz, yumuşak konuş 💗.\n",
+            }
+            extra = tones.get(cur["emotion"], "")
         head = "[DUYGU MODU PRO — SAVAGE]" if savage else "[DUYGU MODU AKTİF]"
         return (
             f"\n{head}\n"

@@ -1651,13 +1651,16 @@ class ExonLive:
         if self._paused:
             return
         self.ui.write_log(f"Siz: {text}")
-        # Duygu modu açıksa his sez; ayrıca NORMAL modda bile aşktan bahsedince kalp yağdır.
+        # Duygu modu açıksa his sez + o duyguya ÖZEL ekran efektini oynat.
         try:
             from actions.emotion import ENGINE, has_love_theme
             if ENGINE.is_enabled():
                 ENGINE.sense_from_text(text)
+                cur = ENGINE.current()
                 try:
                     self.ui.root.after(0, self.ui._draw_plus_button)
+                    if cur.get("emotion") and cur["emotion"] != "notr":
+                        self.ui.emotion_effect(cur["emotion"], 12)
                 except Exception:
                     pass
             # Aşk teması geçiyorsa (mod açık olmasa bile) ekrana kalpler süzülsün.
