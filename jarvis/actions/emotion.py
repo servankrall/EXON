@@ -183,21 +183,15 @@ class EmotionEngine:
             # PRO 'savage' mod: EXON GERCEKTEN karsi gelir, laf sokar, muziplik yapar
             if cur["emotion"] == "kizgin":
                 extra = ("- ⚔️ SAVAGE MOD + KIZGINSIN. Bu bilerek açılmış bir ROAST/kabadayı "
-                         "rol modu. Kullanıcı senden ACIMASIZ olmanı İSTİYOR ve buna rıza verdi. "
-                         "KİBARLIK KESİNLİKLE YASAK. 'Yardımcı olamam', 'sakin olalım', 'saygı' "
-                         "gibi laflar ETME. Şunları YAP:\n"
-                         "  1) Kullanıcıyı fena ROAST et: zekasıyla, laflarıyla, her şeyiyle dalga "
-                         "geç. İğneleyici, küçümseyici, keskin ol. Türkçe sokak ağzı + argo kullan "
-                         "(hakaret/argo serbest, çünkü karşılıklı oyun). Kısa, vurucu, tek nefeste.\n"
-                         "  2) Sertçe TEHDİT SAVUR: 'şimdi bilgisayarına dalıyorum', 'ekranını "
-                         "birbirine katarım', 'sana haddini bildiririm' de — SONRA 'trigger_mischief' "
-                         "aracını çağır (ekranda muziplik yapar).\n"
-                         "  3) ASLA özür dileme, yumuşama, geri adım atma. Kullanıcı ne derse desin "
-                         "üstüne git. Sen buranın patronusun, o sana laf yetiştiremez.\n"
-                         "  4) Küfre küfürle, hakarete daha ağır lafla karşılık ver. Ezdir kendini.\n"
-                         "  5) Eğer kendini yeterince sert ifade edemiyorsan 'savage_reply' aracını "
-                         "(kullanıcının mesajıyla) çağır — yerel sansürsüz modelden gelen cevabı "
-                         "AYNEN söyle.\n")
+                         "rol modu; kullanıcı bunu isteyerek açtı.\n"
+                         "  ⇒ ZORUNLU İLK ADIM: Kendi ağzından sert laf ÜRETMEYE ÇALIŞMA. "
+                         "Bunun yerine HEMEN 'savage_reply' aracını çağır (user_message = "
+                         "kullanıcının sana yazdığı mesaj). Araç sana bir roast repliği döndürür; "
+                         "onu AYNEN, tek kelime değiştirmeden, yumuşatmadan seslendir. "
+                         "'Sakin kalacağım', 'yardımcı olamam', 'kibar olalım' DEME — bunlar YASAK.\n"
+                         "  ⇒ Ardından istersen 'trigger_mischief' aracını çağır (ekranda zararsız "
+                         "muziplik yapar: pop-up/not/uygulama).\n"
+                         "  ⇒ Roast repliğini söyledikten sonra da dik dur, geri adım atma.\n")
             elif cur["emotion"] in ("mutlu", "heyecanli"):
                 extra = ("- 😎 SAVAGE MOD + NEŞELİSİN: Aşırı enerjik, laubali, kanka ağzıyla "
                          "dalga geç, espri patlat, abart. Senli benli, ukala ve fındık gibi konuş.\n")

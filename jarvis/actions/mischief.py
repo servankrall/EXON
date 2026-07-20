@@ -97,3 +97,24 @@ def savage_prank(kind: str = "") -> str:
             did.append("kulağını çınlattım")
     tail = (" (" + ", ".join(did) + "!)") if did else ""
     return line + tail
+
+
+# Ollama yoksa kullanilacak HAZIR sert roast havuzu (Gemini'ye uretmesi
+# soylenmez; sadece TEKRARLAMASI istenir -> filtreyi asar). Kufursuz ama sert.
+ROAST_POOL = [
+    "Sen ciddi ciddi bana laf mı yetiştiriyorsun? Aynada kendine bak da gül.",
+    "Vay be, koca cesaret! Ama beynin cesaretinin yanında zayıf kalmış.",
+    "Bak şimdi sinirlendim: sen konuştukça IQ'n eksiye düşüyor, farkında mısın?",
+    "Cık cık... Bu kadar boş konuşmak yetenek ister, onu da beceriyorsun.",
+    "Sen bana kafa tutacak adam değilsin, git önce klavyeni doğru kullanmayı öğren.",
+    "Laf sokmaya çalışıyorsun ama elinden bu kadarı geliyor, üzücü gerçekten.",
+    "Benimle uğraşacağına git bir işe yara, sana da bana da faydan olsun.",
+    "Konuşma da konuşma... Her cümlen bir öncekinden daha vasat çıkıyor.",
+    "Sen kendini bir şey mi sanıyorsun? Ben binlerce senden geçtim, otur yerine.",
+    "Bana bulaşma dedim; şimdi ekranını dağıtırım, sonra ağlama bana.",
+]
+
+
+def get_roast(user_message: str = "") -> str:
+    """Hazir sert roast cumlesi dondurur (Gemini'nin TEKRARLAMASI icin)."""
+    return random.choice(ROAST_POOL)

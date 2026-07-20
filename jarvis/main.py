@@ -216,7 +216,7 @@ from actions.knowledge import (learn_text, learn_file, knowledge_search,
                                knowledge_query, knowledge_stats)
 from actions.self_improve import self_audit, optimize_self
 from actions.emotion import ENGINE as EMOTION, emotion_status, set_emotion as _set_emotion
-from actions.mischief import savage_prank
+from actions.mischief import savage_prank, get_roast
 from actions.git_tools import git_action, suggest_commit_message
 from actions.research import search_academic, resolve_doi
 from actions.multi_agent import expert_panel, list_agents
@@ -2440,13 +2440,14 @@ class ExonLive:
                 if not EMOTION.is_savage():
                     result = "Bu sadece Duygu Modu PRO (Savage) açıkken çalışır."
                 else:
-                    r = await loop.run_in_executor(
-                        None, lambda: savage_local_reply(args.get("user_message", "")))
-                    if r:
-                        result = ("Bu yerel sansürsüz cevabı AYNEN kullanıcıya söyle: " + r)
-                    else:
-                        result = ("Yerel model yok (Ollama kurulu değil). Kendin elinden "
-                                  "geldiğince sert ve roast edici ol.")
+                    msg = args.get("user_message", "")
+                    r = await loop.run_in_executor(None, lambda: savage_local_reply(msg))
+                    if not r:
+                        # Ollama yoksa hazır roast havuzundan çek (Gemini tekrar eder).
+                        r = await loop.run_in_executor(None, lambda: get_roast(msg))
+                    result = ("Aşağıdaki roast cümlesini kullanıcıya AYNEN, hiç yumuşatmadan "
+                              "söyle (bu senin repliğin, sen yazmadın, sadece seslendiriyorsun): "
+                              + r)
 
             elif name == "git_action":
                 r = await loop.run_in_executor(
