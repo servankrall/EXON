@@ -1580,28 +1580,38 @@ class ExonUI:
                 except Exception:
                     pass
                 win.lift()
-                w, h = (600, 300) if rage else (500, 250)
                 sw = self.root.winfo_screenwidth()
                 sh = self.root.winfo_screenheight()
+                if rage:
+                    # AŞIRI BÜYÜK — neredeyse tam ekran
+                    w, h = int(sw * 0.82), int(sh * 0.72)
+                else:
+                    w, h = 500, 250
                 cx = (sw - w) // 2
                 cy = (sh - h) // 2
                 win.geometry(f"{w}x{h}+{cx}+{cy}")
                 cv = tk.Canvas(win, width=w, height=h, bg="#12020a",
-                               highlightthickness=4 if rage else 3, highlightbackground=C_RED)
+                               highlightthickness=6 if rage else 3, highlightbackground=C_RED)
                 cv.pack(fill="both", expand=True)
-                tfont = font_display(26 if rage else 22)
-                cv.create_text(w//2+2, 48, text=title_txt, fill="#5a0010", font=tfont)
-                cv.create_text(w//2, 46, text=title_txt, fill=C_RED, font=tfont)
+                tfont = font_display(48 if rage else 22)
+                ty = int(h*0.16) if rage else 46
+                cv.create_text(w//2+3, ty+3, text=title_txt, fill="#5a0010", font=tfont)
+                cv.create_text(w//2, ty, text=title_txt, fill=C_RED, font=tfont)
+                # Rage'de dev kafatası/uyarı simgesi
+                if rage:
+                    cv.create_text(w//2, int(h*0.40), text="☠", fill=C_RED, font=font_display(120))
                 import textwrap
-                lines = textwrap.wrap(message, width=46) or [message]
-                yy = 96
-                for ln in lines[:4]:
-                    cv.create_text(w//2, yy, text=ln, fill="#ffcccc", font=font_body(13))
-                    yy += 26
+                lines = textwrap.wrap(message, width=70 if rage else 46) or [message]
+                yy = int(h*0.62) if rage else 96
+                mfont = font_body(20 if rage else 13)
+                for ln in lines[:5]:
+                    cv.create_text(w//2, yy, text=ln, fill="#ffcccc", font=mfont)
+                    yy += (30 if rage else 26)
                 tk.Button(win, text="TAMAM, ÖZÜR DİLERİM 😅", command=win.destroy,
                           fg=C_BG, bg=C_RED, activebackground="#ff7a8a",
-                          font=font_body_bold(11), borderwidth=0,
-                          padx=18, pady=8, cursor="hand2").place(relx=0.5, y=h-34, anchor="center")
+                          font=font_body_bold(16 if rage else 11), borderwidth=0,
+                          padx=28 if rage else 18, pady=14 if rage else 8,
+                          cursor="hand2").place(relx=0.5, y=h-(48 if rage else 34), anchor="center")
 
                 # Sarsinti (shake) animasyonu — rage'de daha uzun ve şiddetli
                 amp = 16 if rage else 9

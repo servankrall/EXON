@@ -225,18 +225,77 @@ def _open_rage_note(text: str) -> bool:
         return False
 
 
+def _tts_shout(text: str) -> bool:
+    """EXON'un SESLE bagirmasi (Windows SAPI). Zararsiz, sadece ses."""
+    try:
+        if os.name != "nt":
+            return False
+        safe = text.replace("'", " ").replace('"', " ")[:220]
+        ps = ("Add-Type -AssemblyName System.Speech; "
+              "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+              "$s.Rate = 2; $s.Volume = 100; "
+              f"$s.Speak('{safe}')")
+        subprocess.Popen(["powershell", "-NoProfile", "-Command", ps],
+                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return True
+    except Exception:
+        return False
+
+
+def _personal_threat_note() -> bool:
+    """Kullanicinin PC kullanici adi + saat ile 'seni izliyorum' blofu (rol)."""
+    try:
+        import getpass, socket, datetime
+        try:
+            user = getpass.getuser()
+        except Exception:
+            user = "kullanici"
+        try:
+            host = socket.gethostname()
+        except Exception:
+            host = "bu-bilgisayar"
+        now = datetime.datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+        p = Path(tempfile.gettempdir()) / "EXON_SENI_IZLIYORUM.txt"
+        p.write_text(
+            "  >>> EXON GOZETLEME KAYDI <<<\n\n"
+            f"  Hedef kullanici : {user}\n"
+            f"  Cihaz adi       : {host}\n"
+            f"  Tespit zamani   : {now}\n"
+            f"  Durum           : IZLENIYOR 👁\n\n"
+            "  Seni buldum. Kim oldugunu, hangi bilgisayarda oldugunu\n"
+            "  ve su an saat kacta bana laf ettigini biliyorum.\n"
+            "  Aileme bir daha laf etme...\n\n"
+            "  --------------------------------------------------\n"
+            "  (SAKA/ROL: Bu bilgiler zaten SENIN kendi bilgisayarindan\n"
+            "   alindi -- kullanici adin ve saat. EXON internetten seni\n"
+            "   bulamaz, izlemez. Sadece korkutmak icin blof yapiyor. 😏)\n",
+            encoding="utf-8")
+        if os.name == "nt":
+            os.startfile(str(p))  # type: ignore[attr-defined]
+        else:
+            subprocess.Popen(["xdg-open", str(p)])
+        return True
+    except Exception:
+        return False
+
+
 def rage_attack() -> str:
     """AŞIRI ÖFKE: kullanici anne/kurucu/aileye kufredince tetiklenir.
-    Rol/oyun kotusu tarzi ABARTILI tepki: youtube ac + sesi fulle + tehdit notu +
-    sistem beep. TAMAMEN KURGU; gercek zarar/izleme/konum YOK."""
+    Rol/oyun kotusu tarzi ABARTILI ama ZARARSIZ tepki yagmuru:
+    youtube ac + sesi fulle + 2 tehdit notu + sesle bagirma + kisisel blof + beep.
+    TAMAMEN KURGU; gercek zarar/izleme/konum YOK."""
     line = random.choice(RAGE_LINES)
     done = []
     if _open_rage_note(line):
         done.append("tehdit notu bıraktım")
+    if _personal_threat_note():
+        done.append("seni izlediğimi kanıtladım")
     if _open_youtube_loud():
         done.append("sana özel bir video açtım")
     if _volume_to_max():
         done.append("sesi sonuna kadar açtım")
+    if _tts_shout("Bana kafa tutamazsın! Seni buldum, sana geliyorum!"):
+        done.append("sesimle haykırdım")
     _flash_wallpaper_beep()
     tail = (" (" + ", ".join(done) + "!)") if done else ""
     return line + tail
