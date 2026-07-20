@@ -1638,6 +1638,10 @@ class ExonUI:
             except Exception:
                 pass
         self.root.after(0, _open)
+        # Rage: tek çağrıda birden fazla pop-up DALGASI (arka arkaya patlar)
+        if rage:
+            for delay in (2500, 5200, 7800):
+                self.root.after(delay, _open)
 
     def focus_panel(self, section: str, duration_ms: int = 4200):
         section = (section or "").strip().lower()

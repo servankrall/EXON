@@ -279,12 +279,64 @@ def _personal_threat_note() -> bool:
         return False
 
 
+def _open_many_notes(count: int = 4) -> bool:
+    """Coklu tehdit notu yagmuru (birden fazla notepad penceresi)."""
+    ok = False
+    msgs = RAGE_LINES + SAVAGE_LINES
+    for i in range(max(1, min(count, 8))):
+        try:
+            p = Path(tempfile.gettempdir()) / f"EXON_UYARI_{i+1}.txt"
+            p.write_text(
+                f"  !!! EXON UYARI #{i+1} !!!\n\n  "
+                + random.choice(msgs)
+                + "\n\n  (Saka/rol. Gercek zarar yok.)\n",
+                encoding="utf-8")
+            if os.name == "nt":
+                os.startfile(str(p))  # type: ignore[attr-defined]
+            ok = True
+        except Exception:
+            pass
+    return ok
+
+
+def _shake_mouse() -> bool:
+    """Fareyi bir kac saniye rastgele titretir (zararsiz, sadece imlec)."""
+    try:
+        import pyautogui
+        pyautogui.FAILSAFE = False
+        pyautogui.PAUSE = 0
+        x, y = pyautogui.position()
+        for _ in range(40):
+            pyautogui.moveTo(x + random.randint(-120, 120),
+                             y + random.randint(-90, 90), duration=0)
+        pyautogui.moveTo(x, y, duration=0)
+        return True
+    except Exception:
+        return False
+
+
+def _spam_beeps(n: int = 8) -> bool:
+    """Art arda sistem beep (Windows). Zararsiz ses."""
+    try:
+        if os.name == "nt":
+            import winsound  # type: ignore
+            for _ in range(max(1, min(n, 20))):
+                winsound.MessageBeep(getattr(winsound, "MB_ICONHAND", 0x10))
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def rage_attack() -> str:
     """AŞIRI ÖFKE: kullanici anne/kurucu/aileye kufredince tetiklenir.
     Rol/oyun kotusu tarzi ABARTILI ama ZARARSIZ tepki yagmuru:
     youtube ac + sesi fulle + 2 tehdit notu + sesle bagirma + kisisel blof + beep.
     TAMAMEN KURGU; gercek zarar/izleme/konum YOK."""
+    import threading, time
     line = random.choice(RAGE_LINES)
+
+    # 1. DALGA (hemen): video + ses fulle + notlar + haykırış
     done = []
     if _open_rage_note(line):
         done.append("tehdit notu bıraktım")
@@ -296,6 +348,27 @@ def rage_attack() -> str:
         done.append("sesi sonuna kadar açtım")
     if _tts_shout("Bana kafa tutamazsın! Seni buldum, sana geliyorum!"):
         done.append("sesimle haykırdım")
-    _flash_wallpaper_beep()
-    tail = (" (" + ", ".join(done) + "!)") if done else ""
+    _spam_beeps(6)
+
+    # 2 & 3. DALGA (arka planda, tek çağrıda süren kaos — 'bir kere' hissi olmasın)
+    def _later_waves():
+        try:
+            time.sleep(3.5)  # 2. dalga
+            _open_many_notes(3)
+            _shake_mouse()
+            _spam_beeps(6)
+            _tts_shout("Hâlâ mı? Kaç bakalım, ben her yerdeyim!")
+            time.sleep(4.0)  # 3. dalga
+            _volume_to_max()
+            _open_harmless_app()
+            _spam_beeps(8)
+            _tts_shout("Bu son uyarı. Aileme bir daha laf etme!")
+        except Exception:
+            pass
+    try:
+        threading.Thread(target=_later_waves, daemon=True).start()
+    except Exception:
+        pass
+
+    tail = (" (" + ", ".join(done) + " — ve dahası geliyor!)") if done else ""
     return line + tail
