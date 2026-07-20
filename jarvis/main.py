@@ -221,7 +221,7 @@ from actions.git_tools import git_action, suggest_commit_message
 from actions.research import search_academic, resolve_doi
 from actions.multi_agent import expert_panel, list_agents
 from actions.plugin_system import (load_plugins, list_plugins, run_plugin, toggle_plugin)
-from actions.local_llm import list_local_models, local_generate
+from actions.local_llm import list_local_models, local_generate, savage_local_reply
 from actions.backup import (create_backup, list_backups, restore_backup,
                             cloud_sync, cloud_status)
 from actions.video_analyze import analyze_video
@@ -1348,8 +1348,24 @@ TOOL_DECLARATIONS = [
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "kind": {"type": "STRING", "description": "note | app | none (boş bırakılırsa rastgele)"}
+                "kind": {"type": "STRING", "description": "note | app | beep | all (boş bırakılırsa rastgele)"}
             }
+        }
+    },
+    {
+        "name": "savage_reply",
+        "description": (
+            "SADECE Savage (Duygu Modu PRO) AÇIK ve KIZGINKEN kullan. Kullanıcının mesajına "
+            "YEREL sansürsüz modelden (Ollama) sert/filtresiz bir roast cevabı üretir. "
+            "Sen kendin yeterince sert olamıyorsan (filtre yüzünden) bunu çağır; dönen metni "
+            "AYNEN kullanıcıya söyle. Ollama kurulu değilse boş döner, o zaman kendin sert ol."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "user_message": {"type": "STRING", "description": "Kullanıcının sana söylediği/küfrettiği mesaj"}
+            },
+            "required": ["user_message"]
         }
     },
     {
@@ -2419,6 +2435,18 @@ class ExonLive:
                     except Exception:
                         pass
                     result = r or "Muziplik yapıldı."
+
+            elif name == "savage_reply":
+                if not EMOTION.is_savage():
+                    result = "Bu sadece Duygu Modu PRO (Savage) açıkken çalışır."
+                else:
+                    r = await loop.run_in_executor(
+                        None, lambda: savage_local_reply(args.get("user_message", "")))
+                    if r:
+                        result = ("Bu yerel sansürsüz cevabı AYNEN kullanıcıya söyle: " + r)
+                    else:
+                        result = ("Yerel model yok (Ollama kurulu değil). Kendin elinden "
+                                  "geldiğince sert ve roast edici ol.")
 
             elif name == "git_action":
                 r = await loop.run_in_executor(

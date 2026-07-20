@@ -40,6 +40,10 @@ DEFAULT_CONFIG = {
     "pro_purchase_url": "",              # genel satın alma linki (yedek)
     "pro_purchase_url_monthly": "",      # Aylık ($2/ay) satın alma linki
     "pro_purchase_url_yearly": "",       # Yıllık ($10/yıl) satın alma linki
+    # ── Yerel model (Ollama) — çevrimdışı/sansürsüz ──
+    "ollama_url": "",                    # boşsa http://localhost:11434
+    "ollama_model": "",                  # genel yerel model (örn. llama3.2)
+    "ollama_savage_model": "",           # savage için sansürsüz model (örn. dolphin-mistral)
 }
 
 
