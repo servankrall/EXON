@@ -218,6 +218,8 @@ from actions.self_improve import self_audit, optimize_self
 from actions.emotion import ENGINE as EMOTION, emotion_status, set_emotion as _set_emotion
 from actions.mischief import savage_prank, get_roast, send_savage_report, rage_attack
 from actions.romance import love_poem, write_love_letter, play_love_music, romantic_surprise
+from actions.toolbox import (calculate, convert_units, generate_password,
+                            random_decision, clipboard_action, text_tools, desktop_notify)
 from actions.git_tools import git_action, suggest_commit_message
 from actions.research import search_academic, resolve_doi
 from actions.multi_agent import expert_panel, list_agents
@@ -1520,6 +1522,87 @@ TOOL_DECLARATIONS = [
             },
             "required": ["video_path"]
         }
+    },
+    {
+        "name": "calculate",
+        "description": "Matematik işlemi hesaplar (güvenli). Örn: '2*(3+4)', 'sqrt(144)', 'sin(pi/2)', '15%3'. Kullanıcı hesap sorduğunda kullan.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {"expression": {"type": "STRING", "description": "Matematik ifadesi"}},
+            "required": ["expression"]
+        }
+    },
+    {
+        "name": "convert_units",
+        "description": "Birim çevirir: uzunluk, ağırlık, hacim, alan, hız, veri, zaman, sıcaklık. Örn: 5 km → mil, 100 C → F, 2 GB → MB.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "value":     {"type": "NUMBER", "description": "Çevrilecek değer"},
+                "from_unit": {"type": "STRING", "description": "Kaynak birim (km, kg, c, gb...)"},
+                "to_unit":   {"type": "STRING", "description": "Hedef birim"}
+            },
+            "required": ["value", "from_unit", "to_unit"]
+        }
+    },
+    {
+        "name": "generate_password",
+        "description": "Güçlü, rastgele şifre üretir. Kullanıcı 'şifre üret/oluştur' dediğinde kullan.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "length":  {"type": "NUMBER", "description": "Uzunluk (6-64, varsayılan 16)"},
+                "symbols": {"type": "BOOLEAN", "description": "Semboller dahil mi (varsayılan true)"}
+            }
+        }
+    },
+    {
+        "name": "random_decision",
+        "description": "Rastgele karar verir. kind: coin (yazı-tura), dice (zar), number (sayı), pick (listeden seç). Kullanıcı 'yazı tura at', 'zar at', 'sayı tut', 'birini seç' dediğinde kullan.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "kind":    {"type": "STRING", "description": "coin | dice | number | pick"},
+                "options": {"type": "STRING", "description": "pick için virgülle ayrılmış seçenekler"},
+                "low":     {"type": "NUMBER", "description": "number için alt sınır"},
+                "high":    {"type": "NUMBER", "description": "number için üst sınır"}
+            }
+        }
+    },
+    {
+        "name": "clipboard_action",
+        "description": "Pano işlemi: panoyu oku (read) veya panoya yaz (write). Kullanıcı 'şunu kopyala', 'panoda ne var' dediğinde kullan.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "read | write"},
+                "text":   {"type": "STRING", "description": "write için panoya yazılacak metin"}
+            }
+        }
+    },
+    {
+        "name": "text_tools",
+        "description": "Metin işlemleri: count (kelime/karakter say), upper, lower, title, reverse, slug. Kullanıcı bir metin üzerinde işlem isteyince kullan.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "count | upper | lower | title | reverse | slug"},
+                "text":   {"type": "STRING", "description": "İşlenecek metin"}
+            },
+            "required": ["action", "text"]
+        }
+    },
+    {
+        "name": "desktop_notify",
+        "description": "Windows masaüstü bildirimi gösterir. Kullanıcı 'bana bildirim gönder/hatırlatma göster' gibi bir şey isterse kullan.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "title":   {"type": "STRING", "description": "Bildirim başlığı"},
+                "message": {"type": "STRING", "description": "Bildirim mesajı"}
+            },
+            "required": ["message"]
+        }
     }
 ]
 
@@ -1561,6 +1644,9 @@ def load_system_prompt() -> str:
         "- Kod yardımı → list_code_files/read_code_file/search_in_code/write_code_file (üzerine yazmadan önce kısaca söyle).\n"
         "- Metin yazma (e-posta/blog/sosyal medya) → compose_text. Web sayfası özeti → summarize_url. "
         "Belge/dosya özeti → summarize_document.\n"
+        "- Hesap/matematik → calculate; birim/sıcaklık çevirme → convert_units; şifre üret → "
+        "generate_password; yazı-tura/zar/rastgele seç → random_decision; pano → clipboard_action; "
+        "metin say/dönüştür → text_tools; masaüstü bildirim → desktop_notify.\n"
         "- Tekrarlayan görev → add_scheduled_task; yüz tanıma → recognize_face; ekran → analyze_screen; "
         "kalıcı bilgi → save_memory.\n"
         "- 'Beni tanı'/'profilimi çıkar' → build_user_profile; 'hafızanı temizle' → cleanup_memory; "
@@ -2467,6 +2553,49 @@ class ExonLive:
                 except Exception:
                     pass
                 result = r or "Romantik jest yapıldı."
+
+            elif name == "calculate":
+                r = await loop.run_in_executor(None, lambda: calculate(args.get("expression", "")))
+                result = r or "Hesaplanamadı."
+
+            elif name == "convert_units":
+                r = await loop.run_in_executor(
+                    None, lambda: convert_units(args.get("value", 0),
+                                                args.get("from_unit", ""),
+                                                args.get("to_unit", "")))
+                result = r or "Çevrilemedi."
+
+            elif name == "generate_password":
+                r = await loop.run_in_executor(
+                    None, lambda: generate_password(int(args.get("length", 16) or 16),
+                                                    bool(args.get("symbols", True))))
+                result = r or "Şifre üretilemedi."
+
+            elif name == "random_decision":
+                r = await loop.run_in_executor(
+                    None, lambda: random_decision(args.get("kind", "coin"),
+                                                  args.get("options", ""),
+                                                  int(args.get("low", 1) or 1),
+                                                  int(args.get("high", 100) or 100)))
+                result = r or "Karar verilemedi."
+
+            elif name == "clipboard_action":
+                r = await loop.run_in_executor(
+                    None, lambda: clipboard_action(args.get("action", "read"),
+                                                   args.get("text", "")))
+                result = r or "Pano işlemi tamamlandı."
+
+            elif name == "text_tools":
+                r = await loop.run_in_executor(
+                    None, lambda: text_tools(args.get("action", "count"),
+                                             args.get("text", "")))
+                result = r or "Metin işlenemedi."
+
+            elif name == "desktop_notify":
+                r = await loop.run_in_executor(
+                    None, lambda: desktop_notify(args.get("title", "EXON"),
+                                                 args.get("message", "")))
+                result = r or "Bildirim gönderildi."
 
             elif name == "trigger_mischief":
                 # Yalnizca Savage acik + kizginken; degilse reddet.
