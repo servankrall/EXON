@@ -230,6 +230,9 @@ from actions.system_pro import (wifi_password, list_wifi_networks, battery_detai
                                running_programs, folder_size, network_test)
 from actions.system_info import (computer_info, network_info, installed_programs,
                                 account_license, full_system_report)
+from actions.deep_system import (gpu_info, monitor_info, motherboard_bios, ram_sticks,
+                               disk_detail, bluetooth_devices, usb_devices,
+                               startup_programs, temperatures, env_variables, all_hardware)
 from actions.git_tools import git_action, suggest_commit_message
 from actions.research import search_academic, resolve_doi
 from actions.multi_agent import expert_panel, list_agents
@@ -1672,7 +1675,18 @@ TOOL_DECLARATIONS = [
     {"name": "network_info", "description": "Ağ bilgisi: IP adresi, bağlı WiFi + tüm KAYITLI WİFİ AĞLARI ve ŞİFRELERİ. 'WiFi şifrelerimi göster' deyince kullan.", "parameters": {"type": "OBJECT", "properties": {}}},
     {"name": "installed_programs", "description": "Bilgisayarda kurulu tüm programları listeler.",
      "parameters": {"type": "OBJECT", "properties": {"limit": {"type": "NUMBER", "description": "Kaç program (varsayılan 40)"}}}},
-    {"name": "account_license", "description": "Kullanıcı hesapları ve Windows lisans durumunu gösterir.", "parameters": {"type": "OBJECT", "properties": {}}}
+    {"name": "account_license", "description": "Kullanıcı hesapları ve Windows lisans durumunu gösterir.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "all_hardware", "description": "TÜM donanım detaylarını gösterir: ekran kartı, monitör, anakart, BIOS, RAM çubukları, diskler, Bluetooth, USB, başlangıç programları, sıcaklıklar. 'Tüm donanım/detaylar' deyince kullan.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "gpu_info", "description": "Ekran kartı (GPU) detayı: model, bellek, sürücü, çözünürlük, yenileme hızı.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "monitor_info", "description": "Bağlı monitörler ve çözünürlükleri.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "motherboard_bios", "description": "Anakart ve BIOS bilgisi (üretici, model, seri no, BIOS sürümü).", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "ram_sticks", "description": "Takılı RAM çubukları: her yuvanın kapasitesi, hızı, üreticisi.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "disk_detail", "description": "Fiziksel diskler (SSD/HDD model, boyut) ve bölümler.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "bluetooth_devices", "description": "Eşleşmiş/bilinen Bluetooth cihazları.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "usb_devices", "description": "Bağlı/bilinen USB cihazları.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "startup_programs", "description": "Bilgisayar açılışında otomatik başlayan programlar.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "temperatures", "description": "Isı ve fan sensörleri (destekleniyorsa).", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "env_variables", "description": "Önemli sistem ortam değişkenleri (PATH, kullanıcı, işlemci vb.).", "parameters": {"type": "OBJECT", "properties": {}}}
 ]
 
 
@@ -1720,6 +1734,9 @@ def load_system_prompt() -> str:
         "(künye + WiFi şifreleri + hesap/lisans). Sadece WiFi şifresi isterse → network_info. "
         "ÖNEMLİ: Windows GİRİŞ (oturum açma) şifresi teknik olarak okunamaz (hash'lidir); "
         "kullanıcı onu isterse bunu açıkla ama WiFi şifreleri gibi okunabilenleri göster.\n"
+        "- 'Tüm donanım / tüm detaylar / ekran kartım ne' → all_hardware (ya da gpu_info, "
+        "monitor_info, motherboard_bios, ram_sticks, disk_detail, bluetooth_devices, "
+        "usb_devices, startup_programs, temperatures, env_variables ayrı ayrı).\n"
         "- Tekrarlayan görev → add_scheduled_task; yüz tanıma → recognize_face; ekran → analyze_screen; "
         "kalıcı bilgi → save_memory.\n"
         "- 'Beni tanı'/'profilimi çıkar' → build_user_profile; 'hafızanı temizle' → cleanup_memory; "
@@ -2762,6 +2779,39 @@ class ExonLive:
                 result = r or "..."
             elif name == "account_license":
                 r = await loop.run_in_executor(None, account_license)
+                result = r or "..."
+            elif name == "all_hardware":
+                r = await loop.run_in_executor(None, all_hardware)
+                result = r or "..."
+            elif name == "gpu_info":
+                r = await loop.run_in_executor(None, gpu_info)
+                result = r or "..."
+            elif name == "monitor_info":
+                r = await loop.run_in_executor(None, monitor_info)
+                result = r or "..."
+            elif name == "motherboard_bios":
+                r = await loop.run_in_executor(None, motherboard_bios)
+                result = r or "..."
+            elif name == "ram_sticks":
+                r = await loop.run_in_executor(None, ram_sticks)
+                result = r or "..."
+            elif name == "disk_detail":
+                r = await loop.run_in_executor(None, disk_detail)
+                result = r or "..."
+            elif name == "bluetooth_devices":
+                r = await loop.run_in_executor(None, bluetooth_devices)
+                result = r or "..."
+            elif name == "usb_devices":
+                r = await loop.run_in_executor(None, usb_devices)
+                result = r or "..."
+            elif name == "startup_programs":
+                r = await loop.run_in_executor(None, startup_programs)
+                result = r or "..."
+            elif name == "temperatures":
+                r = await loop.run_in_executor(None, temperatures)
+                result = r or "..."
+            elif name == "env_variables":
+                r = await loop.run_in_executor(None, env_variables)
                 result = r or "..."
 
             elif name == "trigger_mischief":
