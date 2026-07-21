@@ -220,6 +220,7 @@ from actions.mischief import savage_prank, get_roast, send_savage_report, rage_a
 from actions.romance import love_poem, write_love_letter, play_love_music, romantic_surprise
 from actions.toolbox import (calculate, convert_units, generate_password,
                             random_decision, clipboard_action, text_tools, desktop_notify)
+from actions.emotion_actions import emotion_action
 from actions.git_tools import git_action, suggest_commit_message
 from actions.research import search_academic, resolve_doi
 from actions.multi_agent import expert_panel, list_agents
@@ -1603,6 +1604,23 @@ TOOL_DECLARATIONS = [
             },
             "required": ["message"]
         }
+    },
+    {
+        "name": "emotion_action",
+        "description": (
+            "Duygu moduna özel jest yapar: o duyguya uygun içten bir söz üretir. "
+            "üzgün→moral verir, korkmuş→rahatlatır, gururlu→kutlar, hasta→geçmiş olsun, "
+            "uykulu→iyi geceler, meraklı/şaşırmış→ilginç bilgi, sakin→huzur sözü. "
+            "Kullanıcı o ruh halindeyken destekleyici bir jest için kullan."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "emotion": {"type": "STRING", "description": "mutlu|uzgun|korkmus|gururlu|sasirmis|uykulu|yaramaz|hasta|sakin|merakli|sefkatli"},
+                "topic":   {"type": "STRING", "description": "Bağlam (opsiyonel)"}
+            },
+            "required": ["emotion"]
+        }
     }
 ]
 
@@ -2596,6 +2614,12 @@ class ExonLive:
                     None, lambda: desktop_notify(args.get("title", "EXON"),
                                                  args.get("message", "")))
                 result = r or "Bildirim gönderildi."
+
+            elif name == "emotion_action":
+                r = await loop.run_in_executor(
+                    None, lambda: emotion_action(args.get("emotion", ""),
+                                                 args.get("topic", "")))
+                result = r or "Bu duygunun özel jesti yok."
 
             elif name == "trigger_mischief":
                 # Yalnizca Savage acik + kizginken; degilse reddet.
