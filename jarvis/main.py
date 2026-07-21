@@ -233,6 +233,10 @@ from actions.system_info import (computer_info, network_info, installed_programs
 from actions.deep_system import (gpu_info, monitor_info, motherboard_bios, ram_sticks,
                                disk_detail, bluetooth_devices, usb_devices,
                                startup_programs, temperatures, env_variables, all_hardware)
+from actions.system_extra import (audio_devices, camera_devices, network_adapters,
+                                printers, security_status, windows_updates,
+                                battery_health, power_plan, cpu_detail, locale_info,
+                                user_folders, running_services, everything_report)
 from actions.git_tools import git_action, suggest_commit_message
 from actions.research import search_academic, resolve_doi
 from actions.multi_agent import expert_panel, list_agents
@@ -1686,7 +1690,21 @@ TOOL_DECLARATIONS = [
     {"name": "usb_devices", "description": "Bağlı/bilinen USB cihazları.", "parameters": {"type": "OBJECT", "properties": {}}},
     {"name": "startup_programs", "description": "Bilgisayar açılışında otomatik başlayan programlar.", "parameters": {"type": "OBJECT", "properties": {}}},
     {"name": "temperatures", "description": "Isı ve fan sensörleri (destekleniyorsa).", "parameters": {"type": "OBJECT", "properties": {}}},
-    {"name": "env_variables", "description": "Önemli sistem ortam değişkenleri (PATH, kullanıcı, işlemci vb.).", "parameters": {"type": "OBJECT", "properties": {}}}
+    {"name": "env_variables", "description": "Önemli sistem ortam değişkenleri (PATH, kullanıcı, işlemci vb.).", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "everything_report", "description": "MEGA sistem raporu: işlemci, ses/kamera aygıtları, ağ adaptörleri, yazıcılar, güvenlik (Defender/firewall), Windows güncellemeleri, pil sağlığı, güç planı, bölge, klasörler. 'Her şeyi göster' deyince kullan.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "cpu_detail", "description": "İşlemci ayrıntısı: model, çekirdek, hız, önbellek, anlık kullanım.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "audio_devices", "description": "Ses aygıtları: hoparlör ve mikrofonlar.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "camera_devices", "description": "Kamera/webcam aygıtları.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "network_adapters", "description": "Ağ adaptörleri: MAC adresi, bağlantı hızı, durum.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "printers", "description": "Kurulu yazıcılar.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "security_status", "description": "Windows Defender ve güvenlik duvarı durumu.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "windows_updates", "description": "Son yüklenen Windows güncellemeleri.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "battery_health", "description": "Pil sağlığı (tasarım vs mevcut kapasite, eskime durumu).", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "power_plan", "description": "Aktif güç planı (dengeli/yüksek performans vb.).", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "locale_info", "description": "Saat dilimi, bölge ve dil ayarları.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "user_folders", "description": "Kullanıcı klasörleri (masaüstü, belgeler, indirilenler) ve öğe sayıları.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "running_services", "description": "Çalışan Windows servisleri.",
+     "parameters": {"type": "OBJECT", "properties": {"limit": {"type": "NUMBER", "description": "Kaç servis (varsayılan 20)"}}}}
 ]
 
 
@@ -2812,6 +2830,45 @@ class ExonLive:
                 result = r or "..."
             elif name == "env_variables":
                 r = await loop.run_in_executor(None, env_variables)
+                result = r or "..."
+            elif name == "everything_report":
+                r = await loop.run_in_executor(None, everything_report)
+                result = r or "..."
+            elif name == "cpu_detail":
+                r = await loop.run_in_executor(None, cpu_detail)
+                result = r or "..."
+            elif name == "audio_devices":
+                r = await loop.run_in_executor(None, audio_devices)
+                result = r or "..."
+            elif name == "camera_devices":
+                r = await loop.run_in_executor(None, camera_devices)
+                result = r or "..."
+            elif name == "network_adapters":
+                r = await loop.run_in_executor(None, network_adapters)
+                result = r or "..."
+            elif name == "printers":
+                r = await loop.run_in_executor(None, printers)
+                result = r or "..."
+            elif name == "security_status":
+                r = await loop.run_in_executor(None, security_status)
+                result = r or "..."
+            elif name == "windows_updates":
+                r = await loop.run_in_executor(None, windows_updates)
+                result = r or "..."
+            elif name == "battery_health":
+                r = await loop.run_in_executor(None, battery_health)
+                result = r or "..."
+            elif name == "power_plan":
+                r = await loop.run_in_executor(None, power_plan)
+                result = r or "..."
+            elif name == "locale_info":
+                r = await loop.run_in_executor(None, locale_info)
+                result = r or "..."
+            elif name == "user_folders":
+                r = await loop.run_in_executor(None, user_folders)
+                result = r or "..."
+            elif name == "running_services":
+                r = await loop.run_in_executor(None, lambda: running_services(int(args.get("limit", 20) or 20)))
                 result = r or "..."
 
             elif name == "trigger_mischief":
