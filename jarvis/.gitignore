@@ -31,3 +31,5 @@ memory/tasks.json
 faces/
 memory/scheduled_tasks.json
 wake/*.ppn
+memory/todo.json
+memory/quick_notes.json

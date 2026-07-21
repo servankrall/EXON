@@ -221,6 +221,13 @@ from actions.romance import love_poem, write_love_letter, play_love_music, roman
 from actions.toolbox import (calculate, convert_units, generate_password,
                             random_decision, clipboard_action, text_tools, desktop_notify)
 from actions.emotion_actions import emotion_action
+from actions.health_life import (bmi_calc, water_need, calorie_need,
+                                 daily_motivation, breathing_exercise, pomodoro_info)
+from actions.fun import (tell_joke, fun_fact, riddle, quote_of_day, this_day_in_history)
+from actions.productivity import (todo_action, quick_note, date_diff, days_between,
+                                 world_time, make_qr)
+from actions.system_pro import (wifi_password, list_wifi_networks, battery_detail,
+                               running_programs, folder_size, network_test)
 from actions.git_tools import git_action, suggest_commit_message
 from actions.research import search_academic, resolve_doi
 from actions.multi_agent import expert_panel, list_agents
@@ -1621,7 +1628,43 @@ TOOL_DECLARATIONS = [
             },
             "required": ["emotion"]
         }
-    }
+    },
+    {"name": "bmi_calc", "description": "Vücut Kitle İndeksi (BMI) hesaplar ve yorumlar. Kullanıcı kilo+boy verip BMI/kilo durumu sorunca kullan.",
+     "parameters": {"type": "OBJECT", "properties": {"weight_kg": {"type": "NUMBER", "description": "Kilo (kg)"}, "height_cm": {"type": "NUMBER", "description": "Boy (cm)"}}, "required": ["weight_kg", "height_cm"]}},
+    {"name": "water_need", "description": "Günlük önerilen su miktarını hesaplar. 'Günde ne kadar su içmeliyim' deyince kullan.",
+     "parameters": {"type": "OBJECT", "properties": {"weight_kg": {"type": "NUMBER", "description": "Kilo (kg)"}}, "required": ["weight_kg"]}},
+    {"name": "calorie_need", "description": "Günlük kalori ihtiyacını hesaplar (BMR + aktivite).",
+     "parameters": {"type": "OBJECT", "properties": {"weight_kg": {"type": "NUMBER"}, "height_cm": {"type": "NUMBER"}, "age": {"type": "NUMBER"}, "gender": {"type": "STRING", "description": "e/k"}, "activity": {"type": "STRING", "description": "az|hafif|orta|cok|asiri"}}, "required": ["weight_kg", "height_cm", "age"]}},
+    {"name": "daily_motivation", "description": "Motivasyon sözü söyler. Kullanıcı moralsizse veya motivasyon isteyince kullan.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "breathing_exercise", "description": "Rahatlatıcı 4-7-8 nefes egzersizi talimatı verir. Kullanıcı gergin/stresliyse kullan.",
+     "parameters": {"type": "OBJECT", "properties": {"cycles": {"type": "NUMBER", "description": "Tur sayısı (1-10)"}}}},
+    {"name": "pomodoro_info", "description": "Pomodoro çalışma tekniğini anlatır.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "tell_joke", "description": "Komik bir fıkra/espri söyler. Kullanıcı 'fıkra anlat', 'güldür beni' deyince kullan.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "fun_fact", "description": "İlginç bir 'biliyor muydun' bilgisi verir.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "riddle", "description": "Bir bilmece sorar.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "quote_of_day", "description": "Günün ilham verici sözünü söyler.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "this_day_in_history", "description": "Tarihte bugün ne olmuş anlatır.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "todo_action", "description": "Yapılacaklar listesi. action: add (item), list, done (index), remove (index), clear.",
+     "parameters": {"type": "OBJECT", "properties": {"action": {"type": "STRING", "description": "add|list|done|remove|clear"}, "item": {"type": "STRING"}, "index": {"type": "NUMBER"}}, "required": ["action"]}},
+    {"name": "quick_note", "description": "Hızlı not sistemi. action: add (text), list, clear.",
+     "parameters": {"type": "OBJECT", "properties": {"action": {"type": "STRING", "description": "add|list|clear"}, "text": {"type": "STRING"}}, "required": ["action"]}},
+    {"name": "date_diff", "description": "Bir tarihe kaç gün kaldığını hesaplar (GG.AA.YYYY). 'Yılbaşına kaç gün kaldı' gibi.",
+     "parameters": {"type": "OBJECT", "properties": {"target_date": {"type": "STRING", "description": "Hedef tarih"}, "label": {"type": "STRING", "description": "Etiket (opsiyonel)"}}, "required": ["target_date"]}},
+    {"name": "days_between", "description": "İki tarih arasındaki gün sayısını hesaplar.",
+     "parameters": {"type": "OBJECT", "properties": {"date1": {"type": "STRING"}, "date2": {"type": "STRING"}}, "required": ["date1", "date2"]}},
+    {"name": "world_time", "description": "Bir şehrin yerel saatini söyler (İstanbul, Londra, Tokyo, NY...).",
+     "parameters": {"type": "OBJECT", "properties": {"city": {"type": "STRING", "description": "Şehir adı"}}, "required": ["city"]}},
+    {"name": "make_qr", "description": "Metin/URL için QR kod üretir.",
+     "parameters": {"type": "OBJECT", "properties": {"text": {"type": "STRING", "description": "QR içeriği"}}, "required": ["text"]}},
+    {"name": "wifi_password", "description": "Kayıtlı WiFi ağının şifresini gösterir (kendi bilgisayarından). SSID boşsa bağlı ağı kullanır.",
+     "parameters": {"type": "OBJECT", "properties": {"ssid": {"type": "STRING", "description": "Ağ adı (opsiyonel)"}}}},
+    {"name": "list_wifi_networks", "description": "Kayıtlı tüm WiFi ağlarını listeler.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "battery_detail", "description": "Pil hakkında detaylı bilgi (yüzde, süre, şarj durumu).", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "running_programs", "description": "En çok bellek kullanan çalışan programları listeler.",
+     "parameters": {"type": "OBJECT", "properties": {"top": {"type": "NUMBER", "description": "Kaç program (varsayılan 10)"}}}},
+    {"name": "folder_size", "description": "Bir klasörün toplam boyutunu hesaplar.",
+     "parameters": {"type": "OBJECT", "properties": {"path": {"type": "STRING", "description": "Klasör yolu"}}, "required": ["path"]}},
+    {"name": "network_test", "description": "İnternet bağlantısını test eder (ping). 'İnternetim çalışıyor mu' deyince kullan.", "parameters": {"type": "OBJECT", "properties": {}}}
 ]
 
 
@@ -2620,6 +2663,79 @@ class ExonLive:
                     None, lambda: emotion_action(args.get("emotion", ""),
                                                  args.get("topic", "")))
                 result = r or "Bu duygunun özel jesti yok."
+
+            elif name == "bmi_calc":
+                r = await loop.run_in_executor(None, lambda: bmi_calc(args.get("weight_kg", 0), args.get("height_cm", 0)))
+                result = r or "Hesaplanamadı."
+            elif name == "water_need":
+                r = await loop.run_in_executor(None, lambda: water_need(args.get("weight_kg", 0)))
+                result = r or "Hesaplanamadı."
+            elif name == "calorie_need":
+                r = await loop.run_in_executor(None, lambda: calorie_need(
+                    args.get("weight_kg", 0), args.get("height_cm", 0), int(args.get("age", 25) or 25),
+                    args.get("gender", "e"), args.get("activity", "orta")))
+                result = r or "Hesaplanamadı."
+            elif name == "daily_motivation":
+                r = await loop.run_in_executor(None, daily_motivation)
+                result = r or "..."
+            elif name == "breathing_exercise":
+                r = await loop.run_in_executor(None, lambda: breathing_exercise(int(args.get("cycles", 4) or 4)))
+                result = r or "..."
+            elif name == "pomodoro_info":
+                r = await loop.run_in_executor(None, pomodoro_info)
+                result = r or "..."
+            elif name == "tell_joke":
+                r = await loop.run_in_executor(None, tell_joke)
+                result = r or "..."
+            elif name == "fun_fact":
+                r = await loop.run_in_executor(None, fun_fact)
+                result = r or "..."
+            elif name == "riddle":
+                r = await loop.run_in_executor(None, riddle)
+                result = r or "..."
+            elif name == "quote_of_day":
+                r = await loop.run_in_executor(None, quote_of_day)
+                result = r or "..."
+            elif name == "this_day_in_history":
+                r = await loop.run_in_executor(None, this_day_in_history)
+                result = r or "..."
+            elif name == "todo_action":
+                r = await loop.run_in_executor(None, lambda: todo_action(
+                    args.get("action", "list"), args.get("item", ""), int(args.get("index", 0) or 0)))
+                result = r or "..."
+            elif name == "quick_note":
+                r = await loop.run_in_executor(None, lambda: quick_note(args.get("action", "list"), args.get("text", "")))
+                result = r or "..."
+            elif name == "date_diff":
+                r = await loop.run_in_executor(None, lambda: date_diff(args.get("target_date", ""), args.get("label", "")))
+                result = r or "..."
+            elif name == "days_between":
+                r = await loop.run_in_executor(None, lambda: days_between(args.get("date1", ""), args.get("date2", "")))
+                result = r or "..."
+            elif name == "world_time":
+                r = await loop.run_in_executor(None, lambda: world_time(args.get("city", "istanbul")))
+                result = r or "..."
+            elif name == "make_qr":
+                r = await loop.run_in_executor(None, lambda: make_qr(args.get("text", "")))
+                result = r or "..."
+            elif name == "wifi_password":
+                r = await loop.run_in_executor(None, lambda: wifi_password(args.get("ssid", "")))
+                result = r or "..."
+            elif name == "list_wifi_networks":
+                r = await loop.run_in_executor(None, list_wifi_networks)
+                result = r or "..."
+            elif name == "battery_detail":
+                r = await loop.run_in_executor(None, battery_detail)
+                result = r or "..."
+            elif name == "running_programs":
+                r = await loop.run_in_executor(None, lambda: running_programs(int(args.get("top", 10) or 10)))
+                result = r or "..."
+            elif name == "folder_size":
+                r = await loop.run_in_executor(None, lambda: folder_size(args.get("path", "")))
+                result = r or "..."
+            elif name == "network_test":
+                r = await loop.run_in_executor(None, network_test)
+                result = r or "..."
 
             elif name == "trigger_mischief":
                 # Yalnizca Savage acik + kizginken; degilse reddet.
