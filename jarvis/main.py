@@ -228,6 +228,8 @@ from actions.productivity import (todo_action, quick_note, date_diff, days_betwe
                                  world_time, make_qr)
 from actions.system_pro import (wifi_password, list_wifi_networks, battery_detail,
                                running_programs, folder_size, network_test)
+from actions.system_info import (computer_info, network_info, installed_programs,
+                                account_license, full_system_report)
 from actions.git_tools import git_action, suggest_commit_message
 from actions.research import search_academic, resolve_doi
 from actions.multi_agent import expert_panel, list_agents
@@ -1664,7 +1666,13 @@ TOOL_DECLARATIONS = [
      "parameters": {"type": "OBJECT", "properties": {"top": {"type": "NUMBER", "description": "Kaç program (varsayılan 10)"}}}},
     {"name": "folder_size", "description": "Bir klasörün toplam boyutunu hesaplar.",
      "parameters": {"type": "OBJECT", "properties": {"path": {"type": "STRING", "description": "Klasör yolu"}}, "required": ["path"]}},
-    {"name": "network_test", "description": "İnternet bağlantısını test eder (ping). 'İnternetim çalışıyor mu' deyince kullan.", "parameters": {"type": "OBJECT", "properties": {}}}
+    {"name": "network_test", "description": "İnternet bağlantısını test eder (ping). 'İnternetim çalışıyor mu' deyince kullan.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "full_system_report", "description": "Bilgisayar hakkında TÜM okunabilen bilgileri gösterir: künye (kullanıcı, cihaz, işletim sistemi, RAM, işlemci, disk, seri no), ağ/IP, KAYITLI WİFİ ŞİFRELERİ, hesap/lisans. Kullanıcı 'bilgisayarımın tüm bilgileri', 'sistem bilgisi', 'şifreleri söyle' gibi bir şey sorunca kullan. (NOT: Windows giriş şifresi okunamaz — o hash'lenmiş; ama WiFi şifreleri okunabilir ve gösterilir.)", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "computer_info", "description": "Bilgisayar künyesi: kullanıcı adı, cihaz adı, Windows sürümü, RAM, işlemci, disk, seri no, açık kalma süresi.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "network_info", "description": "Ağ bilgisi: IP adresi, bağlı WiFi + tüm KAYITLI WİFİ AĞLARI ve ŞİFRELERİ. 'WiFi şifrelerimi göster' deyince kullan.", "parameters": {"type": "OBJECT", "properties": {}}},
+    {"name": "installed_programs", "description": "Bilgisayarda kurulu tüm programları listeler.",
+     "parameters": {"type": "OBJECT", "properties": {"limit": {"type": "NUMBER", "description": "Kaç program (varsayılan 40)"}}}},
+    {"name": "account_license", "description": "Kullanıcı hesapları ve Windows lisans durumunu gösterir.", "parameters": {"type": "OBJECT", "properties": {}}}
 ]
 
 
@@ -1708,6 +1716,10 @@ def load_system_prompt() -> str:
         "- Hesap/matematik → calculate; birim/sıcaklık çevirme → convert_units; şifre üret → "
         "generate_password; yazı-tura/zar/rastgele seç → random_decision; pano → clipboard_action; "
         "metin say/dönüştür → text_tools; masaüstü bildirim → desktop_notify.\n"
+        "- 'Bilgisayarımın tüm bilgileri / şifreleri söyle / sistem bilgisi' → full_system_report "
+        "(künye + WiFi şifreleri + hesap/lisans). Sadece WiFi şifresi isterse → network_info. "
+        "ÖNEMLİ: Windows GİRİŞ (oturum açma) şifresi teknik olarak okunamaz (hash'lidir); "
+        "kullanıcı onu isterse bunu açıkla ama WiFi şifreleri gibi okunabilenleri göster.\n"
         "- Tekrarlayan görev → add_scheduled_task; yüz tanıma → recognize_face; ekran → analyze_screen; "
         "kalıcı bilgi → save_memory.\n"
         "- 'Beni tanı'/'profilimi çıkar' → build_user_profile; 'hafızanı temizle' → cleanup_memory; "
@@ -2735,6 +2747,21 @@ class ExonLive:
                 result = r or "..."
             elif name == "network_test":
                 r = await loop.run_in_executor(None, network_test)
+                result = r or "..."
+            elif name == "full_system_report":
+                r = await loop.run_in_executor(None, full_system_report)
+                result = r or "..."
+            elif name == "computer_info":
+                r = await loop.run_in_executor(None, computer_info)
+                result = r or "..."
+            elif name == "network_info":
+                r = await loop.run_in_executor(None, network_info)
+                result = r or "..."
+            elif name == "installed_programs":
+                r = await loop.run_in_executor(None, lambda: installed_programs(int(args.get("limit", 40) or 40)))
+                result = r or "..."
+            elif name == "account_license":
+                r = await loop.run_in_executor(None, account_license)
                 result = r or "..."
 
             elif name == "trigger_mischief":
