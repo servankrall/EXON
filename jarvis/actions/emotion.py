@@ -121,6 +121,8 @@ class EmotionEngine:
         self._intensity = 0.0          # 0..1
         self._updated = time.time()
         self._decay_secs = 180.0       # ~3 dk'da yavasca notr'e doner
+        self._pending_effect = None    # duygu DEGISINCE bir kez oynatilacak efekt
+        self._last_effect_at = 0.0     # efekt spam'ini onlemek icin
 
     # ── Acma/kapama ──────────────────────────────────────────────────────────
     def set_enabled(self, value: bool, savage: bool = False, love: bool = False) -> None:
@@ -187,9 +189,24 @@ class EmotionEngine:
         with self._lock:
             if not self._enabled:
                 return
+            changed = (emotion != self._emotion)
             self._emotion = emotion
             self._intensity = max(0.0, min(1.0, float(intensity)))
             self._updated = time.time()
+            # Efekt SADECE duygu DEGISTIYSE + son efektten >=8sn geçtiyse + notr degilse.
+            now = time.time()
+            if (changed and emotion != "notr"
+                    and (now - self._last_effect_at) >= 8.0):
+                self._pending_effect = emotion
+                self._last_effect_at = now
+
+    def pop_effect(self):
+        """Bekleyen (bir kez oynatilacak) efekt duygusunu alir ve temizler.
+        Efekt yoksa None doner — boylece her mesajda fiskirmaz."""
+        with self._lock:
+            e = self._pending_effect
+            self._pending_effect = None
+            return e
 
     # ── Konusmadan duygu cikar ───────────────────────────────────────────────
     def sense_from_text(self, text: str) -> None:
