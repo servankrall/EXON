@@ -25,20 +25,38 @@ from PIL import Image, ImageTk
 
 from app_config import has_gemini_api_key, load_app_config, save_app_config
 from actions.weather import get_weather_summary, get_auto_location_city
+from actions.license_manager import (is_pro, activate_license, get_purchase_url,
+                                      PRO_FEATURES_TR, current_plan_label)
+from paths import RESOURCE_DIR
 
-# pygame ses sistemi
-try:
-    import pygame
-    pygame.mixer.pre_init(44100, -16, 2, 1024)
-    pygame.mixer.init()
-    _PYGAME_OK = True
-except Exception:
+# pygame ses sistemi — bozuk/sorunlu kurulumda cokmeden devam et.
+# main.py preflight'i pygame'i guvensiz bulduysa HIC import etmeyiz (segfault korumasi).
+if os.environ.get("EXON_NO_PYGAME") == "1":
     _PYGAME_OK = False
+else:
+    try:
+        import pygame
+        try:
+            pygame.mixer.pre_init(44100, -16, 2, 1024)
+            pygame.mixer.init()
+            _PYGAME_OK = True
+        except Exception:
+            # Ses aygiti yok/sorunlu: sessiz 'dummy' surucuye dus, UI yine acilsin.
+            try:
+                os.environ["SDL_AUDIODRIVER"] = "dummy"
+                pygame.mixer.init()
+                _PYGAME_OK = True
+            except Exception:
+                _PYGAME_OK = False
+    except Exception:
+        _PYGAME_OK = False
 
 BASE_DIR = Path(__file__).resolve().parent
 
-SYSTEM_NAME = "EXON"
-MODEL_BADGE = "EXON CORE · Windows"
+SYSTEM_NAME  = "FESA AI"
+COMPANY_NAME = "FESA"
+TAGLINE      = "FESA · GELİŞMİŞ YAPAY ZEKÂ ASİSTANI"
+MODEL_BADGE  = "FESA · NEURAL CORE"
 
 # ── EXON renk paleti — Neon Mavi / Siyah / Hologram ──────────────────────────
 C_BG      = "#04070f"   # derin siyah-lacivert zemin
@@ -96,7 +114,7 @@ STATE_HEX_COLORS = {
 }
 
 # ── SFX dosya yolları ────────────────────────────────────────────────────────
-_SFX_DIR    = BASE_DIR / "SFX"
+_SFX_DIR    = RESOURCE_DIR / "SFX"
 _HUD_FILE   = _SFX_DIR / "HUD.mp3"
 _START_FILE = _SFX_DIR / "Start.mp3"
 _THINK_FILE = _SFX_DIR / "Think.mp3"
@@ -125,12 +143,15 @@ class SoundManager:
                 pygame.mixer.set_num_channels(4)
                 self._ch_ambient    = pygame.mixer.Channel(0)
                 self._ch_foreground = pygame.mixer.Channel(1)
+                self._ch_beat       = pygame.mixer.Channel(2)
             except Exception:
                 self._ch_ambient    = None
                 self._ch_foreground = None
+                self._ch_beat       = None
         else:
             self._ch_ambient    = None
             self._ch_foreground = None
+            self._ch_beat       = None
 
     # ── Dahili yardımcılar ───────────────────────────────────────────────────
 
@@ -253,6 +274,25 @@ class SoundManager:
         if is_thinking:
             self._stop_foreground()
 
+    def play_beat(self, path):
+        """Şarkı ritmini (loop) çalar — vokalin altında duyulacak şekilde."""
+        if not _PYGAME_OK or self._ch_beat is None:
+            return
+        sound = self._load(Path(path))
+        if not sound:
+            return
+        self._stop_ambient()
+        sound.set_volume(max(0.0, min(1.0, self._volume + 0.20)))
+        self._ch_beat.play(sound, loops=-1)
+
+    def stop_beat(self):
+        if self._ch_beat:
+            try:
+                self._ch_beat.stop()
+            except Exception:
+                pass
+        self.start_ambient()
+
     def toggle(self) -> bool:
         self.set_enabled(not self._enabled)
         return self._enabled
@@ -301,7 +341,7 @@ class SoundManager:
 class ExonUI:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("EXON")
+        self.root.title("FESA AI")
         self.root.update_idletasks()
 
         sw = self.root.winfo_screenwidth()
@@ -344,6 +384,9 @@ class ExonUI:
         self.status_blink    = True
         self._jarvis_state   = "INITIALISING"
         self._user_speaking_until = 0.0
+        self._game_mode      = False
+        self._anim_interval  = 45
+        self._face_mode      = True
 
         # ── Panel ────────────────────────────────────────────────────────────
         self._health_visible  = False
@@ -381,6 +424,7 @@ class ExonUI:
         self.on_voice_change = None
         self.on_effects_state_change = None
         self.on_image_uploaded = None
+        self.on_emotion_toggle = None
 
         self._current_voice = self._load_voice()
 
@@ -405,20 +449,20 @@ class ExonUI:
             {'x': random.uniform(0, self.W), 'y': random.uniform(0, self.H),
              'vx': random.uniform(-0.15, 0.15), 'vy': random.uniform(-0.15, 0.15),
              'r': random.uniform(0.5, 1.8), 'a': random.randint(15, 70)}
-            for _ in range(24)
+            for _ in range(16)
         ]
         self.orb_particles = [
             {'angle': random.uniform(0, math.tau), 'orbit': random.uniform(0.06, 0.98),
              'speed': random.uniform(-0.030, 0.030), 'size': random.uniform(0.8, 2.8),
              'phase': random.uniform(0, math.tau), 'wobble': random.uniform(0.010, 0.040),
              'depth': random.uniform(0.30, 1.00)}
-            for _ in range(160)
+            for _ in range(90)
         ]
         self.orb_shell_particles = [
             {'angle': random.uniform(0, math.tau), 'speed': random.uniform(-0.020, 0.020),
              'size': random.uniform(1.4, 3.8), 'phase': random.uniform(0, math.tau),
              'glow': random.uniform(0.4, 1.0)}
-            for _ in range(84)
+            for _ in range(48)
         ]
 
         # ── Canvas ───────────────────────────────────────────────────────────
@@ -447,6 +491,7 @@ class ExonUI:
         self._build_pause_button()
         self._build_image_buttons()
         self._build_shutdown_button()
+        self._build_pro_button()
         self._build_settings_panel()
         self._build_voice_selector(self._settings_body)
         self._build_sfx_button(self._settings_body)
@@ -474,6 +519,7 @@ class ExonUI:
         self.root.after(180, self._play_startup_sfx_once)
         self._kick_brief_refresh()
         self._build_social_bar()
+        self.root.after(60, self._show_boot_splash)
         self.root.after(120, self._enter_fullscreen)
         self._animate()
         self.root.protocol("WM_DELETE_WINDOW", self._shutdown)
@@ -492,6 +538,41 @@ class ExonUI:
         self.root.attributes("-fullscreen", True)
         self.root.geometry(f"{sw}x{sh}+0+0")
         self._resize_surface(sw, sh)
+
+    def _show_boot_splash(self):
+        """Açılışta kısa bir 'FESA' marka ekranı gösterir (~2.2 sn)."""
+        try:
+            sp = tk.Toplevel(self.root)
+            sp.overrideredirect(True)
+            sp.configure(bg=C_BG)
+            sp.attributes("-topmost", True)
+            w, h = 580, 300
+            sw = self.root.winfo_screenwidth()
+            sh = self.root.winfo_screenheight()
+            sp.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
+            cv = tk.Canvas(sp, width=w, height=h, bg=C_BG,
+                           highlightthickness=1, highlightbackground=C_PRI)
+            cv.pack(fill="both", expand=True)
+            # köşe parantezleri (HUD görünümü)
+            bl = 24
+            for bx, by, sx, sy in [(12, 12, 1, 1), (w - 12, 12, -1, 1),
+                                   (12, h - 12, 1, -1), (w - 12, h - 12, -1, -1)]:
+                cv.create_line(bx, by, bx + sx * bl, by, fill=C_CYAN, width=2)
+                cv.create_line(bx, by, bx, by + sy * bl, fill=C_CYAN, width=2)
+            cv.create_text(w // 2 + 2, h // 2 - 30, text="  ".join("FESA"),
+                           fill=self._ac(25, 224, 255, 90), font=font_display(44))
+            cv.create_text(w // 2, h // 2 - 32, text="  ".join("FESA"),
+                           fill=C_PRI, font=font_display(44))
+            cv.create_text(w // 2, h // 2 + 16, text="A  I",
+                           fill=C_CYAN, font=font_display(22))
+            cv.create_line(w // 2 - 150, h // 2 + 44, w // 2 + 150, h // 2 + 44, fill=C_MID)
+            cv.create_text(w // 2, h // 2 + 66,
+                           text="Yapay Zekâ Çekirdeği başlatılıyor...",
+                           fill=C_MID, font=font_body(11))
+            sp.update_idletasks()
+            self.root.after(2200, sp.destroy)
+        except Exception:
+            pass
 
     def _set_layout_metrics(self, width: int, height: int):
         self.W = int(width)
@@ -521,7 +602,7 @@ class ExonUI:
     # ── Social bar (webbrowser ile Windows uyumlu) ───────────────────────────
     def _build_social_bar(self):
         ICON_SIZE = 28
-        ICON_DIR  = BASE_DIR / "Icon"
+        ICON_DIR  = RESOURCE_DIR / "Icon"
         bar = tk.Frame(self.root, bg=C_BG)
         self._social_bar = bar
         bar.place(x=14, y=self.H - FOOTER_H - 52)
@@ -580,6 +661,119 @@ class ExonUI:
         c.create_text(BW//2, BH//2, text="⏻  SHUTDOWN",
                       fill=C_RED, font=font_display(11))
 
+    # ── EXON Pro butonu + satın alma/etkinleştirme ───────────────────────────
+    def _build_pro_button(self):
+        self._pro_canvas = tk.Canvas(self.root, width=196, height=34,
+                                     bg=C_BG, highlightthickness=0, cursor="hand2")
+        self._pro_canvas.bind("<Button-1>", lambda e: self._open_pro_dialog())
+        self._draw_pro_button()
+
+    def _draw_pro_button(self):
+        c = self._pro_canvas
+        bw = int(c["width"]); bh = int(c["height"])
+        c.delete("all")
+        try:
+            pro = is_pro()
+        except Exception:
+            pro = False
+        col   = C_GOLD if pro else C_CYAN
+        label = "✦ EXON PRO" if pro else "✦ PRO'YA GEÇ"
+        bl = 7
+        for bx, by, sx, sy in [(0, 0, 1, 1), (bw, 0, -1, 1), (0, bh, 1, -1), (bw, bh, -1, -1)]:
+            c.create_line(bx, by, bx+sx*bl, by, fill=col, width=2)
+            c.create_line(bx, by, bx, by+sy*bl, fill=col, width=2)
+        c.create_text(bw//2, bh//2, text=label, fill=col, font=font_display(12))
+
+    def _open_pro_dialog(self):
+        try:
+            pro = is_pro()
+        except Exception:
+            pro = False
+        win = tk.Toplevel(self.root)
+        win.title("FESA AI PRO")
+        win.configure(bg=C_BG)
+        win.attributes("-topmost", True)
+        win.lift()
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        w, h = 560, 720
+        win.geometry(f"{w}x{h}+{(sw - w) // 2}+{max(0, (sh - h) // 2)}")
+        win.minsize(520, 560)
+        win.resizable(True, True)
+
+        tk.Label(win, text="✦ FESA AI PRO", fg=C_GOLD, bg=C_BG,
+                 font=font_display(26)).pack(pady=(18, 2))
+        if pro:
+            lbl = current_plan_label()
+            sub = f"Pro aktif{(' · ' + lbl + ' plan') if lbl else ''} — teşekkürler! 🎉"
+        else:
+            sub = "Tüm güçlü özelliklerin kilidini aç — Aylık $2 / Yıllık $10"
+        tk.Label(win, text=sub, fg=(C_GREEN if pro else C_CYAN), bg=C_BG,
+                 font=font_body(12)).pack(pady=(0, 10))
+
+        if not pro:
+            buy_note = tk.Label(win, text="", fg=C_GOLD, bg=C_BG, font=font_body(10),
+                                wraplength=480, justify="center")
+
+            def _buy(plan):
+                url = get_purchase_url(plan)
+                if url:
+                    webbrowser.open(url)
+                    buy_note.configure(text="Satın alma sayfası tarayıcıda açıldı.")
+                else:
+                    buy_note.configure(
+                        text="⚠ Satın alma bağlantısı ayarlı değil (config/api_keys.json → PRO_KURULUM.md).")
+
+            plans = tk.Frame(win, bg=C_BG)
+            plans.pack(pady=(6, 4))
+            tk.Button(plans, text="Aylık · $2", cursor="hand2", command=lambda: _buy("monthly"),
+                      fg=C_BG, bg=C_CYAN, activebackground=C_ORG2, activeforeground=C_BG,
+                      font=font_body_bold(13), borderwidth=0, padx=22, pady=9).pack(side="left", padx=8)
+            tk.Button(plans, text="Yıllık · $10", cursor="hand2", command=lambda: _buy("yearly"),
+                      fg=C_BG, bg=C_GOLD, activebackground=C_ORG2, activeforeground=C_BG,
+                      font=font_body_bold(13), borderwidth=0, padx=22, pady=9).pack(side="left", padx=8)
+            buy_note.pack(pady=(2, 8))
+
+            # ── Lisans etkinleştirme kutusu (her zaman görünür, Enter çalışır) ──
+            box = tk.Frame(win, bg="#081426", highlightbackground=C_MID, highlightthickness=1)
+            box.pack(fill="x", padx=24, pady=(2, 10))
+            tk.Label(box, text="Lisans anahtarını yapıştır ve Enter'a bas:",
+                     fg=C_CYAN, bg="#081426", font=font_body_bold(11)).pack(pady=(10, 4))
+            entry = tk.Entry(box, width=40, fg=C_TEXT, bg="#06101f", insertbackground=C_TEXT,
+                             borderwidth=0, font=font_body(13), justify="center")
+            entry.pack(pady=(0, 8), ipady=6, padx=12)
+            status = tk.Label(box, text="", fg=C_GOLD, bg="#081426", font=font_body(11),
+                              wraplength=480, justify="center")
+            status.pack(pady=(0, 4))
+
+            def _activate(event=None):
+                ok, msg = activate_license(entry.get())
+                status.configure(text=msg, fg=(C_GREEN if ok else C_RED))
+                if ok:
+                    self._draw_pro_button()
+                    self.write_log("SYS: ✦ EXON Pro etkinleştirildi.")
+                    self.root.after(1600, win.destroy)
+
+            entry.bind("<Return>", _activate)
+            entry.bind("<KP_Enter>", _activate)
+            tk.Button(box, text="✓  ETKİNLEŞTİR", command=_activate, cursor="hand2",
+                      fg=C_BG, bg=C_GREEN, activebackground=C_CYAN, activeforeground=C_BG,
+                      font=font_body_bold(12), borderwidth=0, padx=22, pady=8).pack(pady=(0, 12))
+            entry.focus_set()
+
+        # Pro özellikleri (kompakt liste)
+        feats = tk.Frame(win, bg=C_BG)
+        feats.pack(padx=30, anchor="w", pady=(2, 6))
+        tk.Label(feats, text="Pro ile gelenler:", fg=C_MID, bg=C_BG,
+                 font=font_body_bold(10), anchor="w").pack(anchor="w")
+        for f in PRO_FEATURES_TR:
+            tk.Label(feats, text=f"✓  {f}", fg=C_TEXT, bg=C_BG,
+                     font=font_body(11), anchor="w").pack(anchor="w")
+
+        tk.Button(win, text="KAPAT", command=win.destroy, cursor="hand2",
+                  fg=C_TEXT, bg=C_PANEL, activebackground=C_MID, activeforeground=C_BG,
+                  font=font_body_bold(11), borderwidth=0, padx=20, pady=6).pack(pady=(6, 14))
+
     # ── Görsel butonları (yükle / oluştur) ───────────────────────────────────
     def _make_bracket_button(self, text: str, color: str, command,
                              width: int = 150, height: int = 36):
@@ -601,6 +795,18 @@ class ExonUI:
             "✨ GÖRSEL OLUŞTUR", C_PRI, self._on_generate_image_click, width=164)
 
     def _on_upload_image_click(self):
+        # Free kullanıcı: günlük kısıtlı deneme; Pro: sınırsız.
+        try:
+            from actions.trial import image_allowed, consume_image, image_remaining
+            from actions.license_manager import is_pro as _ip
+            if not image_allowed():
+                self.write_log("SYS: Ücretsiz görsel yükleme denemen bugünlük doldu. "
+                               "Sınırsız için EXON Pro'ya geç.")
+                self._open_pro_dialog()
+                return
+            _pre_pro = _ip()
+        except Exception:
+            _pre_pro = True
         path = filedialog.askopenfilename(
             title="Analiz için bir görsel seç",
             filetypes=[("Görseller", "*.png *.jpg *.jpeg *.webp *.bmp *.gif"),
@@ -608,8 +814,16 @@ class ExonUI:
         )
         if not path:
             return
+        # Hak kullanımını işle (sadece free)
+        try:
+            if not _pre_pro:
+                from actions.trial import consume_image, image_remaining
+                consume_image()
+                self.write_log(f"SYS: Görsel yükleme denemesi — bugün {image_remaining()} hakkın kaldı.")
+        except Exception:
+            pass
         self.write_log(f"Siz: [Görsel yüklendi: {os.path.basename(path)}]")
-        self.show_image_preview(path, title="EXON · Yüklenen Görsel")
+        self.show_image_preview(path, title="FESA AI · Yüklenen Görsel")
         if self.on_image_uploaded:
             threading.Thread(target=self.on_image_uploaded,
                              args=(path, ""), daemon=True).start()
@@ -617,8 +831,11 @@ class ExonUI:
             self.write_log("SYS: Görsel analizi için EXON bağlantısı bekleniyor.")
 
     def _on_generate_image_click(self):
+        if not is_pro():
+            self._open_pro_dialog()
+            return
         prompt = simpledialog.askstring(
-            "EXON · Görsel Oluştur",
+            "FESA AI · Görsel Oluştur",
             "Nasıl bir görsel oluşturayım? (İngilizce açıklama daha iyi sonuç verir)",
             parent=self.root,
         )
@@ -640,12 +857,12 @@ class ExonUI:
             res = {"ok": False, "path": None, "message": f"Görsel oluşturulamadı: {e}"}
         if res.get("ok") and res.get("path"):
             self.write_log(f"SYS: {res.get('message', 'Görsel oluşturuldu.')}")
-            self.show_image_preview(res["path"], title="EXON · Oluşturulan Görsel")
+            self.show_image_preview(res["path"], title="FESA AI · Oluşturulan Görsel")
             self.play_success_sfx()
         else:
             self.write_log(f"ERR: {res.get('message', 'Görsel oluşturulamadı.')}")
 
-    def show_image_preview(self, image_path: str, title: str = "EXON · Görsel"):
+    def show_image_preview(self, image_path: str, title: str = "FESA AI · Görsel"):
         """Üretilen veya yüklenen görseli ayrı bir pencerede gösterir."""
         def _open():
             try:
@@ -1050,17 +1267,25 @@ class ExonUI:
             p["y"] %= self.H
 
     def _build_input_bar(self, lw: int):
-        x0    = self.CHAT_X
-        btn_w = 76
-        gap   = 8
-        inp_w = lw - btn_w - gap
+        x0      = self.CHAT_X
+        btn_w   = 76
+        plus_w  = 34
+        gap     = 8
+        inp_w   = lw - btn_w - plus_w - gap * 2
+        # Sol: "+" duygu modu butonu
+        self._plus_btn = tk.Button(
+            self.root, text="✛", command=self._toggle_emotion_mode,
+            fg=C_CYAN, bg=C_PANEL, activeforeground=C_BG, activebackground=C_CYAN,
+            font=font_body_bold(15), borderwidth=0, cursor="hand2",
+            highlightthickness=1, highlightbackground=C_MID)
+        self._plus_btn.place(x=x0, y=self.CHAT_INPUT_Y, width=plus_w, height=INPUT_H)
         self._input_var   = tk.StringVar()
         self._input_entry = tk.Entry(
             self.root, textvariable=self._input_var,
             fg=C_TEXT, bg="#081426", insertbackground=C_TEXT,
             borderwidth=0, font=font_body(11),
             highlightthickness=1, highlightbackground=C_DIM, highlightcolor=C_PRI)
-        self._input_entry.place(x=x0, y=self.CHAT_INPUT_Y, width=inp_w, height=INPUT_H)
+        self._input_entry.place(x=x0+plus_w+gap, y=self.CHAT_INPUT_Y, width=inp_w, height=INPUT_H)
         self._input_entry.bind("<Return>",   self._on_input_submit)
         self._input_entry.bind("<KP_Enter>", self._on_input_submit)
         self._send_btn = tk.Button(
@@ -1068,8 +1293,257 @@ class ExonUI:
             fg=C_ORG, bg=C_PANEL, activeforeground=C_BG, activebackground=C_ORG,
             font=font_body_bold(10), borderwidth=0, cursor="hand2",
             highlightthickness=1, highlightbackground=C_ORG)
-        self._send_btn.place(x=x0+inp_w+gap, y=self.CHAT_INPUT_Y,
+        self._send_btn.place(x=x0+plus_w+gap+inp_w+gap, y=self.CHAT_INPUT_Y,
                              width=btn_w, height=INPUT_H)
+        self._draw_plus_button()
+
+    def _draw_plus_button(self):
+        """Duygu modu durumuna gore + butonunun gorunumunu gunceller."""
+        try:
+            from actions.emotion import ENGINE
+            on = ENGINE.is_enabled()
+            savage = ENGINE.is_savage()
+            love = ENGINE.is_love()
+            cur = ENGINE.current()
+        except Exception:
+            on, savage, love, cur = False, False, False, {"emoji": ""}
+        if on and love:
+            self._plus_btn.configure(text=cur.get("emoji", "💕") or "💕",
+                                     fg=C_BG, bg="#ff69b4", highlightbackground="#ff69b4")
+        elif on and savage:
+            self._plus_btn.configure(text=cur.get("emoji", "🔥") or "🔥",
+                                     fg=C_BG, bg=C_RED, highlightbackground=C_RED)
+        elif on:
+            self._plus_btn.configure(text=cur.get("emoji", "❤") or "❤",
+                                     fg=C_BG, bg=C_GOLD, highlightbackground=C_GOLD)
+        else:
+            self._plus_btn.configure(text="✛", fg=C_CYAN, bg=C_PANEL,
+                                     highlightbackground=C_MID)
+
+    def _toggle_emotion_mode(self):
+        """'+' butonu: zaten açıksa kapatır, kapalıysa küçük menü açar."""
+        try:
+            from actions.emotion import ENGINE
+            if ENGINE.is_enabled():
+                self._close_plus_menu()
+                self._set_emotion_mode(False, False)
+                return
+        except Exception:
+            pass
+        self._open_plus_menu()
+
+    def _open_plus_menu(self):
+        """'+' butonunun hemen ÜSTÜNDE küçük bir menü açar."""
+        self._close_plus_menu()
+        try:
+            from actions.trial import emotion_remaining
+            from actions.license_manager import is_pro
+            pro = is_pro()
+            rem = emotion_remaining()
+        except Exception:
+            pro, rem = False, 0
+
+        menu = tk.Frame(self.root, bg="#081426",
+                        highlightbackground=C_CYAN, highlightthickness=1)
+        self._plus_menu = menu
+        items = []
+
+        # Serbest duygu modu (free: kısıtlı süre, pro: sınırsız)
+        if pro:
+            free_label = "❤  Duygu Modu"
+        else:
+            mins = int(rem // 60)
+            free_label = (f"❤  Duygu Modu  (deneme: {mins} dk)" if rem > 0
+                          else "❤  Duygu Modu  (deneme doldu)")
+        items.append((free_label, C_CYAN, lambda: self._pick_emotion_mode(False)))
+
+        # PRO savage mod
+        pro_label = "🔥  Duygu Modu PRO — Savage" + ("" if pro else "  🔒")
+        items.append((pro_label, C_GOLD, lambda: self._pick_emotion_mode(True)))
+
+        # Aşk / Romantik mod
+        love_label = "💕  Aşk Modu — romantik & tatlı" + ("" if pro else "  🔒")
+        items.append((love_label, "#ff69b4", lambda: self._pick_emotion_mode(False, love=True)))
+
+        for i, (label, color, cmd) in enumerate(items):
+            b = tk.Button(menu, text=label, command=cmd, cursor="hand2",
+                          fg=color, bg="#081426", activebackground="#0e2440",
+                          activeforeground=color, font=font_body_bold(10),
+                          borderwidth=0, anchor="w", padx=12, pady=7)
+            b.pack(fill="x")
+
+        menu.update_idletasks()
+        mw = max(220, menu.winfo_reqwidth())
+        mh = menu.winfo_reqheight()
+        px = self._plus_btn.winfo_x()
+        py = self._plus_btn.winfo_y()
+        menu.place(x=px, y=py - mh - 6, width=mw, height=mh)
+        menu.lift()
+        # Disari tiklayinca kapat
+        self._plus_menu_dismiss = self.root.bind("<Button-1>", self._maybe_close_plus_menu, add="+")
+
+    def _maybe_close_plus_menu(self, event):
+        m = getattr(self, "_plus_menu", None)
+        if not m:
+            return
+        # Menü veya + butonu üstüne tıklanmadıysa kapat
+        wx, wy, ww, wh = m.winfo_rootx(), m.winfo_rooty(), m.winfo_width(), m.winfo_height()
+        if not (wx <= event.x_root <= wx+ww and wy <= event.y_root <= wy+wh):
+            bx, by = self._plus_btn.winfo_rootx(), self._plus_btn.winfo_rooty()
+            bw, bh = self._plus_btn.winfo_width(), self._plus_btn.winfo_height()
+            if not (bx <= event.x_root <= bx+bw and by <= event.y_root <= by+bh):
+                self._close_plus_menu()
+
+    def _close_plus_menu(self):
+        m = getattr(self, "_plus_menu", None)
+        if m:
+            try:
+                m.destroy()
+            except Exception:
+                pass
+            self._plus_menu = None
+
+    def _pick_emotion_mode(self, savage: bool, love: bool = False):
+        """Menüden bir mod seçildi."""
+        self._close_plus_menu()
+        # PRO modlar (savage + aşk) sadece Pro kullanıcıda
+        if savage or love:
+            try:
+                from actions.license_manager import is_pro
+                if not is_pro():
+                    self._open_pro_dialog()
+                    return
+            except Exception:
+                pass
+        else:
+            # Free deneme süresi kontrolü
+            try:
+                from actions.trial import begin_emotion
+                ok, msg = begin_emotion()
+                if not ok:
+                    self.write_log("SYS: " + msg)
+                    self._open_pro_dialog()
+                    return
+                if msg:
+                    self.write_log("SYS: " + msg)
+            except Exception:
+                pass
+        self._set_emotion_mode(True, savage, love)
+
+    def _set_emotion_mode(self, enable: bool, savage: bool, love: bool = False):
+        try:
+            from actions.emotion import ENGINE
+            from actions.trial import end_emotion
+            if enable:
+                ENGINE.set_enabled(True, savage=savage, love=love)
+            else:
+                ENGINE.set_enabled(False)
+                try:
+                    end_emotion()
+                except Exception:
+                    pass
+        except Exception as exc:
+            self.write_log(f"ERR: Duygu modu — {exc}")
+            return
+        self._draw_plus_button()
+        if enable:
+            if savage:
+                self.write_log("SYS: 🔥 DUYGU MODU PRO (Savage) AÇILDI — EXON sana karşılık verecek!")
+            elif love:
+                self.write_log("SYS: 💕 AŞK MODU AÇILDI — EXON şimdi çok tatlı ve romantik!")
+                self.start_heart_rain()
+            else:
+                self.write_log("SYS: ❤ Duygu Modu AÇILDI — EXON artık duygularını yansıtacak.")
+        else:
+            self.write_log("SYS: Duygu Modu kapatıldı.")
+        if self.on_emotion_toggle:
+            threading.Thread(target=self.on_emotion_toggle, args=(enable,), daemon=True).start()
+
+    # Her duyguya özel emoji yağmuru paketi (emoji listesi, renk, yön)
+    _EMOJI_RAIN = {
+        "romantik": (["💗", "💕", "❤️", "💖", "💘", "💋"], "#ff69b4", "up"),
+        "mutlu":    (["😄", "✨", "🎉", "🌟", "😁"],        "#3ce68c", "up"),
+        "heyecanli":(["🤩", "⭐", "🎊", "💥", "🔥"],        "#ffc83c", "up"),
+        "uzgun":    (["💧", "😢", "🌧️", "💙"],             "#6e8cc8", "down"),
+        "korkmus":  (["😱", "👻", "💀", "🕷️", "⚠️"],       "#9678ff", "down"),
+        "gururlu":  ["👑", "😎", "🏆", "💪", "⭐"],
+        "sasirmis": (["❗", "😲", "⁉️", "💫"],              "#78dcff", "up"),
+        "uykulu":   (["💤", "😴", "🌙", "⭐"],              "#8ea0c0", "up"),
+        "yaramaz":  (["😜", "😏", "🤪", "✌️"],              "#ff8c5a", "up"),
+        "hasta":    (["🤒", "🤧", "🌡️", "💊"],             "#96c882", "down"),
+        "sefkatli": (["🥰", "🤗", "💗", "🌸"],             "#ff82b4", "up"),
+        "kizgin":   (["😠", "💢", "🔥", "⚡"],              "#ff4646", "up"),
+    }
+
+    def emotion_effect(self, emotion: str, n: int = 12):
+        """Verilen duyguya özel ekran efektini oynatır."""
+        pack = self._EMOJI_RAIN.get(emotion)
+        if not pack:
+            return
+        if isinstance(pack, tuple):
+            emojis, color, direction = pack
+        else:
+            emojis, color, direction = pack, "#ffffff", "up"
+        self.start_emoji_rain(emojis, color, direction, n)
+
+    def start_heart_rain(self, n: int = 14):
+        """Geriye dönük uyum: kalp yağmuru."""
+        self.start_emoji_rain(["💗", "💕", "❤️", "💖", "💘"], "#ff69b4", "up", n)
+
+    def start_emoji_rain(self, emojis, color="#ffffff", direction="up", n=14):
+        """Ekranda süzülen emoji yağmuru (yön: up=aşağıdan yukarı, down=yukarıdan aşağı)."""
+        def _spawn():
+            try:
+                import random as _r
+                for i in range(max(1, min(n, 26))):
+                    lbl = tk.Label(self.root, text=_r.choice(emojis),
+                                   bg=C_BG, fg=color, font=("Segoe UI Emoji", _r.randint(16, 34)))
+                    x = _r.randint(40, max(60, self.W - 60))
+                    y = (self.H - 40) if direction == "up" else -20
+                    lbl.place(x=x, y=y)
+                    self._float_emoji(lbl, x, y, _r.uniform(2.2, 4.5), i * 80, direction)
+            except Exception:
+                pass
+        self.root.after(0, _spawn)
+
+    def _float_emoji(self, lbl, x, y, speed, delay, direction):
+        """Bir emojiyi belirtilen yönde süzer, ekran dışında yok eder."""
+        step_px = speed * 3
+        def _step(cy):
+            out = (cy < -40) if direction == "up" else (cy > self.H + 40)
+            if out or not lbl.winfo_exists():
+                try:
+                    lbl.destroy()
+                except Exception:
+                    pass
+                return
+            import math as _m
+            nx = x + int(14 * _m.sin(cy * 0.03))
+            try:
+                lbl.place(x=nx, y=int(cy))
+            except Exception:
+                return
+            ny = cy - step_px if direction == "up" else cy + step_px
+            self.root.after(30, lambda: _step(ny))
+        self.root.after(max(0, delay), lambda: _step(y))
+
+    def _float_heart(self, lbl, x, y, speed, delay):
+        """Bir kalbi yukarı süzer, üstte yok eder."""
+        def _step(cy):
+            if cy < -40 or not lbl.winfo_exists():
+                try:
+                    lbl.destroy()
+                except Exception:
+                    pass
+                return
+            import math as _m
+            nx = x + int(14 * _m.sin(cy * 0.03))
+            try:
+                lbl.place(x=nx, y=int(cy))
+            except Exception:
+                return
+            self.root.after(30, lambda: _step(cy - speed * 3))
+        self.root.after(max(0, delay), lambda: _step(y))
 
     def _place_layout_widgets(self):
         self.log_frame.place(x=self.CHAT_X, y=self.CHAT_Y,
@@ -1124,11 +1598,17 @@ class ExonUI:
             self._settings_body.place_forget()
             self._debug_body.place_forget()
 
-        inp_w = self.CHAT_W - 84
-        self._input_entry.place(x=self.CHAT_X, y=self.CHAT_INPUT_Y,
+        plus_w, gap, btn_w = 34, 8, 76
+        inp_w = self.CHAT_W - btn_w - plus_w - gap * 2
+        self._plus_btn.place(x=self.CHAT_X, y=self.CHAT_INPUT_Y,
+                             width=plus_w, height=INPUT_H)
+        self._input_entry.place(x=self.CHAT_X + plus_w + gap, y=self.CHAT_INPUT_Y,
                                 width=inp_w, height=INPUT_H)
-        self._send_btn.place(x=self.CHAT_X + inp_w + 8, y=self.CHAT_INPUT_Y,
-                             width=76, height=INPUT_H)
+        self._send_btn.place(x=self.CHAT_X + plus_w + gap + inp_w + gap, y=self.CHAT_INPUT_Y,
+                             width=btn_w, height=INPUT_H)
+
+        if hasattr(self, "_pro_canvas"):
+            self._pro_canvas.place(x=geo["btn_x"] + geo["btn_w"] + 10, y=geo["btn_y"] + 6)
 
     def _on_input_submit(self, event=None):
         text = self._input_var.get().strip()
@@ -1177,6 +1657,89 @@ class ExonUI:
     def play_error_sfx(self):
         self.root.after(0, self.sound.play_error)
 
+    def show_savage_popup(self, message: str, rage: bool = False):
+        """Savage modda kızgınken ekrana DRAMATIK, sarsılan tehditkar pop-up + alarm.
+        rage=True ise aşırı öfke: daha büyük, daha çok titreyen, birden fazla pop-up."""
+        def _open():
+            try:
+                self.sound.play_error()  # alarm/uyari sesi
+            except Exception:
+                pass
+            try:
+                import random as _r
+                win = tk.Toplevel(self.root)
+                title_txt = "☠  EXON KONTROLDEN ÇIKTI  ☠" if rage else "⚠  EXON ÇOK KIZGIN  ⚠"
+                win.title(title_txt)
+                win.configure(bg="#12020a")
+                win.attributes("-topmost", True)
+                try:
+                    win.overrideredirect(True)  # çerçevesiz, daha rahatsız edici
+                except Exception:
+                    pass
+                win.lift()
+                sw = self.root.winfo_screenwidth()
+                sh = self.root.winfo_screenheight()
+                if rage:
+                    # AŞIRI BÜYÜK — neredeyse tam ekran
+                    w, h = int(sw * 0.82), int(sh * 0.72)
+                else:
+                    w, h = 500, 250
+                cx = (sw - w) // 2
+                cy = (sh - h) // 2
+                win.geometry(f"{w}x{h}+{cx}+{cy}")
+                cv = tk.Canvas(win, width=w, height=h, bg="#12020a",
+                               highlightthickness=6 if rage else 3, highlightbackground=C_RED)
+                cv.pack(fill="both", expand=True)
+                tfont = font_display(48 if rage else 22)
+                ty = int(h*0.16) if rage else 46
+                cv.create_text(w//2+3, ty+3, text=title_txt, fill="#5a0010", font=tfont)
+                cv.create_text(w//2, ty, text=title_txt, fill=C_RED, font=tfont)
+                # Rage'de dev kafatası/uyarı simgesi
+                if rage:
+                    cv.create_text(w//2, int(h*0.40), text="☠", fill=C_RED, font=font_display(120))
+                import textwrap
+                lines = textwrap.wrap(message, width=70 if rage else 46) or [message]
+                yy = int(h*0.62) if rage else 96
+                mfont = font_body(20 if rage else 13)
+                for ln in lines[:5]:
+                    cv.create_text(w//2, yy, text=ln, fill="#ffcccc", font=mfont)
+                    yy += (30 if rage else 26)
+                tk.Button(win, text="TAMAM, ÖZÜR DİLERİM 😅", command=win.destroy,
+                          fg=C_BG, bg=C_RED, activebackground="#ff7a8a",
+                          font=font_body_bold(16 if rage else 11), borderwidth=0,
+                          padx=28 if rage else 18, pady=14 if rage else 8,
+                          cursor="hand2").place(relx=0.5, y=h-(48 if rage else 34), anchor="center")
+
+                # Sarsinti (shake) animasyonu — rage'de daha uzun ve şiddetli
+                amp = 16 if rage else 9
+                max_shake = 60 if rage else 22
+                shakes = {"n": 0}
+                def _shake():
+                    if shakes["n"] > max_shake or not win.winfo_exists():
+                        try:
+                            win.geometry(f"{w}x{h}+{cx}+{cy}")
+                        except Exception:
+                            pass
+                        return
+                    dx = _r.randint(-amp, amp)
+                    dy = _r.randint(-amp, amp)
+                    try:
+                        win.geometry(f"{w}x{h}+{cx+dx}+{cy+dy}")
+                    except Exception:
+                        return
+                    shakes["n"] += 1
+                    win.after(45, _shake)
+                _shake()
+                win.after(11000 if rage else 9000,
+                          lambda: win.winfo_exists() and win.destroy())
+            except Exception:
+                pass
+        self.root.after(0, _open)
+        # Rage: tek çağrıda birden fazla pop-up DALGASI (arka arkaya patlar)
+        if rage:
+            for delay in (2500, 5200, 7800):
+                self.root.after(delay, _open)
+
     def focus_panel(self, section: str, duration_ms: int = 4200):
         section = (section or "").strip().lower()
         if not section:
@@ -1185,6 +1748,36 @@ class ExonUI:
             self._panel_focus = section
             self._panel_focus_until = time.time() + max(0.8, duration_ms / 1000.0)
         self.root.after(0, _apply)
+
+    def set_game_mode(self, enabled: bool):
+        """Oyun modu: EXON animasyon hızını ve parçacık yükünü düşürür ki oyun/
+        uygulama daha akıcı çalışsın. set_performance_mode aracı tarafından çağrılır."""
+        def _apply():
+            self._game_mode = bool(enabled)
+            self._anim_interval = 80 if self._game_mode else 45
+            if self._game_mode:
+                self.write_log("SYS: 🎮 Oyun modu açık — EXON kaynak kullanımını düşürdü.")
+            else:
+                self.write_log("SYS: Oyun modu kapalı — normal moda dönüldü.")
+        self.root.after(0, _apply)
+
+    def start_song_beat(self, style: str = "pop"):
+        """Şarkı söylerken arka planda türe uygun ritim/beat çalmaya başlar."""
+        def _go():
+            try:
+                from actions.beat import make_beat_loop
+                path = make_beat_loop(style)
+                if path:
+                    self.sound.play_beat(path)
+            except Exception:
+                pass
+        threading.Thread(target=_go, daemon=True).start()
+
+    def stop_song_beat(self):
+        try:
+            self.sound.stop_beat()
+        except Exception:
+            pass
 
     def _state_color(self, state: str | None = None) -> str:
         effective = state or self._jarvis_state
@@ -1234,9 +1827,12 @@ class ExonUI:
 
     def _type_char(self, text, i, tag):
         if i < len(text):
-            self.log_text.insert(tk.END, text[i], tag)
+            # Uzun metinlerde daha büyük adımlarla yaz: hem daha hızlı görünür hem de
+            # animasyon ana iş parçacığını (ve ses gönderimini) daha az meşgul eder.
+            step = max(2, len(text) // 140)
+            self.log_text.insert(tk.END, text[i:i+step], tag)
             self.log_text.see(tk.END)
-            self.root.after(7, self._type_char, text, i+1, tag)
+            self.root.after(12, self._type_char, text, i+step, tag)
         else:
             self.log_text.insert(tk.END, "\n")
             self.log_text.configure(state="disabled")
@@ -1276,6 +1872,16 @@ class ExonUI:
             threading.Thread(target=self._update_stats, daemon=True).start()
         if t % 1800 == 1:
             self._kick_brief_refresh()
+        # Free deneme süresi dolduysa duygu modunu otomatik kapat (~her 5 sn kontrol)
+        if t % 110 == 0:
+            try:
+                from actions.emotion import ENGINE
+                from actions.trial import emotion_expired
+                if ENGINE.is_enabled() and emotion_expired():
+                    self._set_emotion_mode(False, False)
+                    self.write_log("SYS: ⏳ Ücretsiz duygu modu süren doldu. Pro ile sınırsız.")
+            except Exception:
+                pass
 
         if self.speaking and t % 3 == 0:
             self._wave_jarvis = [random.randint(6, 30) for _ in range(18)]
@@ -1327,7 +1933,7 @@ class ExonUI:
             self.status_blink = not self.status_blink
 
         self._draw()
-        self.root.after(33, self._animate)
+        self.root.after(self._anim_interval, self._animate)
 
     # ── Yardımcı ─────────────────────────────────────────────────────────────
     @staticmethod
@@ -1337,7 +1943,21 @@ class ExonUI:
 
     def _orb_rgb(self):
         state = "PAUSED" if self.paused else self._jarvis_state
-        return ORB_COLORS.get(state, ORB_COLORS["LISTENING"])
+        base = ORB_COLORS.get(state, ORB_COLORS["LISTENING"])
+        # Duygu modu açıksa ve aktif bir his varsa, orb/yüz rengini ona doğru kaydır.
+        if state not in ("PAUSED", "ERROR"):
+            try:
+                from actions.emotion import ENGINE
+                cur = ENGINE.current()
+                if cur["enabled"] and cur["emotion"] != "notr" and cur["intensity"] > 0.12:
+                    er, eg, eb = cur["rgb"]
+                    w = min(0.7, cur["intensity"])  # his rengine karışım oranı
+                    return (int(base[0]*(1-w) + er*w),
+                            int(base[1]*(1-w) + eg*w),
+                            int(base[2]*(1-w) + eb*w))
+            except Exception:
+                pass
+        return base
 
     @staticmethod
     def _split_summary_lines(text: str, limit: int = 4) -> list[str]:
@@ -1676,7 +2296,8 @@ class ExonUI:
 
         speak_shell_push = 1.16 if self.speaking else 1.07 if self.user_speaking else 1.0
         shell_r = field_r * 0.93 * speak_shell_push
-        for idx, sp in enumerate(self.orb_shell_particles):
+        _shell = self.orb_shell_particles[::2] if self._game_mode else self.orb_shell_particles
+        for idx, sp in enumerate(_shell):
             angle  = sp['angle'] + t*sp['speed']*(2.8 if self.speaking else 1.6 if self.user_speaking else 1.1)
             wobble = 1.0 + (0.07 if self.speaking else 0.035)*math.sin(t*0.08+sp['phase'])
             x = FCX + math.cos(angle)*shell_r*wobble
@@ -1704,7 +2325,8 @@ class ExonUI:
 
         field_limit = inner_r*(0.82 if self.paused else 1.36 if self.speaking else
                                1.16 if self.user_speaking else 1.0)
-        for idx, p in enumerate(self.orb_particles):
+        _orbs = self.orb_particles[::3] if self._game_mode else self.orb_particles
+        for idx, p in enumerate(_orbs):
             speed_mult = (0.10 if self.paused else 3.10 if self.speaking else
                           2.00 if self.user_speaking else 1.10)
             angle  = p['angle'] + t*p['speed']*speed_mult
@@ -1735,6 +2357,341 @@ class ExonUI:
             c.create_oval(FCX-void_r, FCY-void_r, FCX+void_r, FCY+void_r,
                           fill=C_BG, outline="")
 
+    def _draw_face(self, c):
+        """Ortadaki tasarım: moda göre ifade değiştiren DETAYLI robot kafası.
+        Oktagon kafa plakası, anten+sinyal, kulak modülleri, kaşlı/bebekli gözler,
+        ekolayzır ağız, tarama çizgisi, yanak ışıkları ve hafif kafa salınımı."""
+        state = "PAUSED" if self.paused else self._jarvis_state
+        game  = getattr(self, "_game_mode", False)
+        R, G, B = self._orb_rgb()
+        col   = self._ac(R, G, B, 255)
+        col2  = self._ac(R, G, B, 150)
+        soft  = self._ac(R, G, B, 70)
+        white = self._ac(255, 255, 255, 130)
+        t     = self.tick
+        bob   = int(2 * math.sin(t * 0.05))
+        FCX   = self.FCX
+        fy    = self.FCY + bob
+        FW    = max(150, int(self.FACE * self.scale))
+        hr    = int(FW * 0.30)
+        hw, hh = hr, int(hr * 1.05)
+        ch     = int(hr * 0.34)
+
+        def oct_pts(ax0, ay0, ax1, ay1, cc):
+            return [ax0+cc, ay0, ax1-cc, ay0, ax1, ay0+cc, ax1, ay1-cc,
+                    ax1-cc, ay1, ax0+cc, ay1, ax0, ay1-cc, ax0, ay0+cc]
+
+        x0, y0, x1, y1 = FCX-hw, fy-hh, FCX+hw, fy+hh
+
+        # Boyun + omuz ipucu
+        c.create_rectangle(FCX-int(hr*0.16), y1-2, FCX+int(hr*0.16), y1+int(hr*0.18),
+                           fill="#061626", outline=col2, width=1)
+        c.create_line(FCX-int(hr*0.72), y1+int(hr*0.22), FCX+int(hr*0.72), y1+int(hr*0.22),
+                      fill=col2, width=3)
+
+        # Dış parıltı + kafa plakası (oktagon)
+        c.create_polygon(oct_pts(x0-5, y0-5, x1+5, y1+5, ch+3), fill="", outline=soft, width=2)
+        c.create_polygon(oct_pts(x0, y0, x1, y1, ch), fill="#061626", outline=col, width=2)
+        c.create_line(FCX, y0+int(hr*0.10), FCX, fy-int(hr*0.55), fill=col2, width=1)
+        for rvx, rvy in [(x0+ch, y0+6), (x1-ch, y0+6), (x0+6, y1-ch), (x1-6, y1-ch)]:
+            c.create_oval(rvx-2, rvy-2, rvx+2, rvy+2, fill=col2, outline="")
+
+        # Anten + sinyal
+        ant_top = y0 - int(hr*0.34)
+        c.create_line(FCX, y0, FCX, ant_top, fill=col, width=3)
+        pulse = 0.5 + 0.5*math.sin(t*0.2)
+        ab = max(3, int(hr*0.09))
+        c.create_oval(FCX-ab, ant_top-ab, FCX+ab, ant_top+ab,
+                      fill=self._ac(R, G, B, int(110+145*pulse)), outline="")
+        if self.speaking:
+            for k in range(1, 3):
+                rr = int(hr*0.12*k) + int((t*2) % 14)
+                c.create_arc(FCX-rr, ant_top-rr, FCX+rr, ant_top+rr,
+                             start=30, extent=120, outline=soft, width=1, style="arc")
+
+        # Kulak modülleri
+        for side in (-1, 1):
+            ex = FCX + side*hw
+            c.create_rectangle(ex-int(hr*0.10), fy-int(hr*0.22),
+                               ex+int(hr*0.10), fy+int(hr*0.22),
+                               fill="#061626", outline=col2, width=1)
+            c.create_oval(ex-int(hr*0.05), fy-int(hr*0.05),
+                          ex+int(hr*0.05), fy+int(hr*0.05), outline=col, width=1)
+
+        # Yüz plakası (iç oktagon)
+        ix0, iy0 = x0+int(hr*0.16), y0+int(hr*0.22)
+        ix1, iy1 = x1-int(hr*0.16), y1-int(hr*0.16)
+        c.create_polygon(oct_pts(ix0, iy0, ix1, iy1, int(ch*0.7)),
+                         fill="#03101e", outline=col2, width=1)
+
+        # Tarama çizgisi (yüz plakasında aşağı süzülür)
+        sy = iy0 + int((t*3) % max(1, (iy1-iy0)))
+        c.create_line(ix0+4, sy, ix1-4, sy, fill=self._ac(R, G, B, 40), width=1)
+
+        # Göz/ağız metrikleri
+        edx = int(hr*0.42); ey = fy - int(hr*0.14)
+        ew  = max(6, int(hr*0.23)); eh = max(7, int(hr*0.27))
+        lx, rx = FCX-edx, FCX+edx
+        my  = fy + int(hr*0.46); mw = int(hr*0.5)
+        blink = (t % 150) < 6
+
+        if state != "PAUSED":
+            c.create_line(lx-ew, ey-eh-int(hr*0.12), lx+ew, ey-eh-int(hr*0.12), fill=soft, width=2)
+            c.create_line(rx-ew, ey-eh-int(hr*0.12), rx+ew, ey-eh-int(hr*0.12), fill=soft, width=2)
+
+        def eye_full(cx, up=False):
+            c.create_oval(cx-ew-3, ey-eh-3, cx+ew+3, ey+eh+3, outline=soft, width=1)
+            c.create_oval(cx-ew, ey-eh, cx+ew, ey+eh, fill=self._ac(R, G, B, 170), outline=col, width=2)
+            px, py = cx, ey - (int(eh*0.42) if up else 0)
+            pr = max(3, int(ew*0.5))
+            c.create_oval(px-pr, py-pr, px+pr, py+pr, fill="#02101c", outline="")
+            c.create_oval(px-pr, py-pr, px, py, fill=white, outline="")
+        def eye_closed(cx):
+            c.create_line(cx-ew, ey, cx+ew, ey, fill=col, width=4)
+        def eye_happy(cx):
+            c.create_arc(cx-ew, ey-eh, cx+ew, ey+eh+eh, start=30, extent=120,
+                         outline=col, width=4, style="arc")
+        def eye_angry(cx, left):
+            c.create_oval(cx-ew, ey-int(eh*0.3), cx+ew, ey+eh, fill=self._ac(R, G, B, 170), outline=col, width=2)
+            pr = max(3, int(ew*0.45))
+            c.create_oval(cx-pr, ey-pr+int(eh*0.2), cx+pr, ey+pr+int(eh*0.2), fill="#02101c", outline="")
+            if left:
+                c.create_line(cx-ew, ey-eh, cx+ew, ey-int(eh*0.2), fill=col, width=4)
+            else:
+                c.create_line(cx-ew, ey-int(eh*0.2), cx+ew, ey-eh, fill=col, width=4)
+
+        def mouth_grille():
+            bars = 7
+            bw = max(3, int((mw*2)/(bars*1.6)))
+            gap = max(2, int(bw*0.6))
+            total = bars*bw + (bars-1)*gap
+            sx = FCX - total//2
+            for i in range(bars):
+                amp = abs(math.sin(t*0.4 + i*0.9))
+                bh = int(hr*0.06 + hr*0.22*amp)
+                bx = sx + i*(bw+gap)
+                c.create_rectangle(bx, my-bh, bx+bw, my+bh, fill=col, outline="")
+        def mouth_smile(big=False):
+            span = int(mw*1.2) if big else mw
+            c.create_arc(FCX-span, my-span, FCX+span, my+int(span*0.4),
+                         start=200, extent=140, outline=col, width=4, style="arc")
+        def mouth_frown():
+            c.create_arc(FCX-mw, my-int(mw*0.4), FCX+mw, my+mw,
+                         start=20, extent=140, outline=col, width=4, style="arc")
+        def mouth_line():
+            c.create_line(FCX-mw, my, FCX+mw, my, fill=col2, width=4)
+        def mouth_o():
+            r = int(mw*0.5)
+            c.create_oval(FCX-r, my-r, FCX+r, my+r, outline=col, width=4)
+        def mouth_small():
+            c.create_arc(FCX-int(mw*0.5), my-int(mw*0.4), FCX+int(mw*0.5), my+int(mw*0.5),
+                         start=210, extent=120, outline=col, width=3, style="arc")
+        def brow(cx, inner_down=False, raised=False):
+            yb = ey - eh - int(hr*0.16)
+            if raised:
+                yb -= int(hr*0.06)
+            if inner_down:  # kızgın: iç uçlar aşağı
+                if cx < FCX:
+                    c.create_line(cx-ew, yb, cx+ew, yb+int(hr*0.12), fill=col, width=4)
+                else:
+                    c.create_line(cx-ew, yb+int(hr*0.12), cx+ew, yb, fill=col, width=4)
+            else:  # üzgün: iç uçlar yukarı (ters)
+                if cx < FCX:
+                    c.create_line(cx-ew, yb+int(hr*0.10), cx+ew, yb, fill=col, width=3)
+                else:
+                    c.create_line(cx-ew, yb, cx+ew, yb+int(hr*0.10), fill=col, width=3)
+        def tear(cx):
+            ty = ey + eh + int(hr*0.04)
+            c.create_oval(cx-3, ty, cx+3, ty+int(hr*0.14),
+                          fill=self._ac(120, 200, 255, 200), outline="")
+
+        # ── Duygu modu: yüz ifadesini RUH HALİNE göre çiz ───────────────────
+        emo = None
+        if state not in ("PAUSED", "ERROR") and not game:
+            try:
+                from actions.emotion import ENGINE
+                cur = ENGINE.current()
+                if cur["enabled"] and cur["emotion"] != "notr" and cur["intensity"] > 0.12:
+                    emo = cur["emotion"]
+            except Exception:
+                emo = None
+
+        if emo:
+            mouth_anim = mouth_grille if self.speaking else None
+            if emo == "mutlu":
+                (eye_closed if blink else eye_happy)(lx)
+                (eye_closed if blink else eye_happy)(rx)
+                (mouth_anim or (lambda: mouth_smile(big=True)))()
+            elif emo == "heyecanli":
+                # parlak, büyük gözler + açık ağız (titreşimli)
+                eye_full(lx); eye_full(rx)
+                wob = int(2*math.sin(t*0.5))
+                c.create_text(FCX+int(hr*0.7)+wob, fy-int(hr*0.5), text="!",
+                              fill=col, font=font_display(16))
+                (mouth_anim or mouth_o)()
+            elif emo == "sakin":
+                # yarı kapalı huzurlu gözler
+                for cx in (lx, rx):
+                    c.create_arc(cx-ew, ey-int(eh*0.5), cx+ew, ey+eh,
+                                 start=200, extent=140, outline=col, width=3, style="arc")
+                (mouth_anim or mouth_small)()
+            elif emo == "merakli":
+                # bir kaş kalkık + yana bakan bebekler
+                eye_full(lx); eye_full(rx)
+                brow(lx, raised=True)
+                c.create_text(FCX+int(hr*0.62), fy-int(hr*0.5), text="?",
+                              fill=col, font=font_display(15))
+                (mouth_anim or mouth_small)()
+            elif emo == "uzgun":
+                brow(lx); brow(rx)
+                eye_full(lx); eye_full(rx)
+                if (t // 40) % 3 == 0:
+                    tear(lx)
+                (mouth_anim or mouth_frown)()
+            elif emo == "kizgin":
+                brow(lx, inner_down=True); brow(rx, inner_down=True)
+                eye_angry(lx, True); eye_angry(rx, False)
+                (mouth_anim or mouth_frown)()
+            elif emo == "sefkatli":
+                (eye_closed if blink else eye_happy)(lx)
+                (eye_closed if blink else eye_happy)(rx)
+                # kalpler
+                for hx in (FCX-int(hr*0.7), FCX+int(hr*0.7)):
+                    c.create_text(hx, fy-int(hr*0.45), text="♥",
+                                  fill=self._ac(255, 130, 180, 220), font=font_display(13))
+                (mouth_anim or (lambda: mouth_smile(big=True)))()
+            elif emo == "romantik":
+                # KALP GÖZLER (nabız gibi büyüyüp küçülür) + kızaran yanaklar + öpücük
+                pink = self._ac(255, 105, 180, 255)
+                beat = 1.0 + 0.18 * math.sin(t * 0.25)        # kalp atışı
+                hsize = max(8, int(ew * 1.7 * beat))
+                wink = (t % 120) < 8                          # arada göz kırpma
+                for i, cx in enumerate((lx, rx)):
+                    if wink and i == 1:  # sağ göz kırpar
+                        c.create_line(cx-ew, ey, cx+ew, ey, fill=pink, width=4)
+                    else:
+                        c.create_text(cx, ey, text="♥", fill=pink, font=font_display(hsize))
+                # kızaran yanaklar (yoğunluğu nabızla değişir)
+                blush = int(70 + 60 * (0.5 + 0.5*math.sin(t*0.25)))
+                for cxk in (FCX-int(hr*0.52), FCX+int(hr*0.52)):
+                    c.create_oval(cxk-int(hr*0.14), my-int(hr*0.20),
+                                  cxk+int(hr*0.14), my-int(hr*0.02),
+                                  fill=self._ac(255, 120, 170, blush), outline="")
+                # ağız: konuşuyorsa oynar, değilse tatlı gülüş
+                if mouth_anim:
+                    mouth_anim()
+                else:
+                    mouth_smile(big=True)
+                # arada öpücük atar (uçan kalp)
+                if (t % 90) < 30:
+                    kx = FCX + int(hr*0.7) + int((t % 90) * 1.5)
+                    ky = my - int((t % 90) * 0.8)
+                    c.create_text(kx, ky, text="💋", font=font_display(14))
+            elif emo == "korkmus":
+                # titreyen küçük gözler + açık kaygılı ağız + ter damlası
+                jx = int(3*math.sin(t*0.9)); jy = int(2*math.cos(t*1.1))
+                for cx in (lx, rx):
+                    c.create_oval(cx-ew+jx, ey-eh+jy, cx+ew+jx, ey+eh+jy,
+                                  fill=self._ac(R, G, B, 170), outline=col, width=2)
+                    pr = max(2, int(ew*0.35))
+                    c.create_oval(cx-pr+jx, ey-pr+jy, cx+pr+jx, ey+pr+jy, fill="#02101c", outline="")
+                mouth_o()
+                c.create_text(rx+int(ew*1.4), ey-int(eh*0.5), text="💧",
+                              fill=self._ac(120,200,255,230), font=font_display(12))
+            elif emo == "gururlu":
+                # havalı: gözlerde güneş gözlüğü + hafif gülüş + taç
+                c.create_rectangle(lx-ew-4, ey-int(eh*0.4), rx+ew+4, ey+int(eh*0.4),
+                                   fill="#101018", outline=col, width=3)
+                c.create_line(lx+ew, ey, rx-ew, ey, fill=col, width=3)
+                c.create_text(FCX, y0-int(hr*0.02), text="👑", font=font_display(20))
+                mouth_smile()
+            elif emo == "sasirmis":
+                # kocaman gözler + kocaman O ağız + üstte ünlem
+                for cx in (lx, rx):
+                    c.create_oval(cx-ew-4, ey-eh-4, cx+ew+4, ey+eh+4, fill=white, outline=col, width=3)
+                    pr = max(3, int(ew*0.4))
+                    c.create_oval(cx-pr, ey-pr, cx+pr, ey+pr, fill="#02101c", outline="")
+                r0 = int(mw*0.6)
+                c.create_oval(FCX-r0, my-r0, FCX+r0, my+r0, fill="#02101c", outline=col, width=4)
+                c.create_text(FCX, fy-int(hr*0.5), text="❗", fill=col, font=font_display(20))
+            elif emo == "uykulu":
+                # yarı kapalı gözler + küçük düz ağız + zzz
+                for cx in (lx, rx):
+                    c.create_arc(cx-ew, ey-int(eh*0.3), cx+ew, ey+eh,
+                                 start=200, extent=140, outline=col, width=3, style="arc")
+                mouth_small()
+                zt = (t % 90) // 30
+                c.create_text(FCX+int(hr*0.6), fy-int(hr*0.5)-zt*8,
+                              text="z"*(zt+1), fill=col, font=font_display(12+zt*3))
+            elif emo == "yaramaz":
+                # bir göz kısık (göz kırpma) + sırıtma + dil
+                if blink:
+                    eye_closed(lx)
+                else:
+                    c.create_line(lx-ew, ey, lx+ew, ey-int(eh*0.3), fill=col, width=4)  # kısık
+                eye_full(rx)
+                mouth_smile()
+                if (t % 60) < 30:
+                    c.create_text(FCX+int(mw*0.3), my+int(hr*0.06), text="😝", font=font_display(13))
+            elif emo == "hasta":
+                # bitkin gözler (^ ^) + titrek ağız + termometre
+                for cx in (lx, rx):
+                    c.create_line(cx-ew, ey, cx, ey-int(eh*0.5), fill=col, width=3)
+                    c.create_line(cx, ey-int(eh*0.5), cx+ew, ey, fill=col, width=3)
+                c.create_line(FCX-mw, my, FCX-int(mw*0.3), my-4, FCX+int(mw*0.3), my+4,
+                              FCX+mw, my, fill=col, width=3)
+                c.create_text(FCX+int(hr*0.55), my, text="🌡️", font=font_display(14))
+                # yeşil hasta yanağı
+                c.create_oval(FCX-int(hr*0.6), my-6, FCX-int(hr*0.35), my+10,
+                              fill=self._ac(120,200,110,90), outline="")
+            elif emo == "sefkatli":
+                (eye_closed if blink else eye_happy)(lx)
+                (eye_closed if blink else eye_happy)(rx)
+                for hx in (FCX-int(hr*0.7), FCX+int(hr*0.7)):
+                    c.create_text(hx, fy-int(hr*0.45), text="♥",
+                                  fill=self._ac(255,130,180,220), font=font_display(13))
+                mouth_smile(big=True)
+            else:
+                eye_full(lx); eye_full(rx); mouth_smile()
+        elif state == "PAUSED":
+            eye_closed(lx); eye_closed(rx); mouth_line()
+            c.create_text(FCX+int(hr*0.62), fy-int(hr*0.55), text="z z", fill=col, font=font_display(14))
+        elif state == "ERROR":
+            eye_angry(lx, True); eye_angry(rx, False); mouth_frown()
+        elif game:
+            c.create_rectangle(lx-ew-8, ey-eh//2, rx+ew+8, ey+eh//2, fill="#02101c", outline=col, width=2)
+            span = (rx+ew+8)-(lx-ew-8)
+            sxp = (lx-ew-8) + int((t*7) % max(1, span))
+            c.create_line(sxp, ey-eh//2+2, sxp, ey+eh//2-2, fill=col, width=3)
+            c.create_text(FCX, ey, text="FESA", fill=self._ac(R, G, B, 120), font=font_body_bold(8))
+            mouth_grille() if self.speaking else mouth_line()
+        elif self.speaking:
+            (eye_closed if blink else eye_happy)(lx)
+            (eye_closed if blink else eye_happy)(rx)
+            mouth_grille()
+        elif state in ("THINKING", "INITIALISING"):
+            eye_full(lx, up=True); eye_full(rx, up=True)
+            for k in range(3):
+                on = (t // 8) % 3 >= k
+                dc = col if on else soft
+                cxk = FCX - 16 + k*16
+                c.create_oval(cxk-3, my-3, cxk+3, my+3, fill=dc, outline="")
+        elif self.user_speaking:
+            eye_full(lx); eye_full(rx); mouth_smile()
+        else:  # LISTENING
+            if blink:
+                eye_closed(lx); eye_closed(rx)
+            else:
+                eye_full(lx); eye_full(rx)
+            mouth_smile()
+
+        # Yanak durum ışıkları
+        for side in (-1, 1):
+            litx = FCX + side*int(hr*0.6)
+            lit_on = self.status_blink or self.speaking
+            c.create_oval(litx-3, fy+int(hr*0.18)-3, litx+3, fy+int(hr*0.18)+3,
+                          fill=col if lit_on else soft, outline="")
+
     def _draw(self):
         c = self.bg
         W = self.W
@@ -1742,7 +2699,7 @@ class ExonUI:
         t = self.tick
         c.delete("all")
 
-        step = 48
+        step = 96
         for x in range(0, W, step):
             for y in range(0, H, step):
                 c.create_rectangle(x, y, x+1, y+1, fill=C_DIMMER, outline="")
@@ -1764,6 +2721,8 @@ class ExonUI:
         self._draw_left_panel(c)
         self._draw_right_panel(c)
         self._draw_orb(c)
+        if getattr(self, "_face_mode", True):
+            self._draw_face(c)
 
         state_label = "PAUSED" if self.paused else self._jarvis_state
         state_col   = self._state_color(state_label)
@@ -1771,6 +2730,21 @@ class ExonUI:
                       fill=C_TEXT, font=font_display(18))
         c.create_text(self.FCX, self.CTRL_Y-12, text=f"● {state_label.title()}",
                       fill=state_col, font=font_body_bold(11))
+        if self._game_mode:
+            c.create_text(self.FCX, self.CTRL_Y-54, text="🎮 GAME MODE",
+                          fill=C_GREEN, font=font_body_bold(11))
+        else:
+            # Duygu modu açıksa o anki ruh halini göster
+            try:
+                from actions.emotion import ENGINE
+                ecur = ENGINE.current()
+                if ecur["enabled"]:
+                    er, eg, eb = ecur["rgb"]
+                    label = f"{ecur['emoji']} {ecur['emotion'].upper()}"
+                    c.create_text(self.FCX, self.CTRL_Y-54, text=label,
+                                  fill=self._ac(er, eg, eb, 255), font=font_body_bold(12))
+            except Exception:
+                pass
 
         c.create_rectangle(0, 0, W, HDR_H, fill="#03070f", outline="")
         c.create_line(0, HDR_H, W, HDR_H, fill=C_MID, width=1)
@@ -1781,7 +2755,7 @@ class ExonUI:
         c.create_text(W//2+1, 25, text="  ".join(SYSTEM_NAME), fill=self._ac(25, 224, 255, 90),
                       font=font_display(26))
         c.create_text(W//2, 24, text="  ".join(SYSTEM_NAME), fill=C_PRI, font=font_display(26))
-        c.create_text(W//2, 52, text="ADVANCED VOICE INTELLIGENCE · NEURAL CORE",
+        c.create_text(W//2, 52, text=TAGLINE,
                       fill=C_CYAN, font=font_body(11))
         c.create_text(22, 36, text=MODEL_BADGE, fill=C_DIM, font=font_body(10), anchor="w")
 
@@ -1795,7 +2769,7 @@ class ExonUI:
         c.create_rectangle(0, H-FOOTER_H, W, H, fill="#03070f", outline="")
         c.create_line(0, H-FOOTER_H, W, H-FOOTER_H, fill=C_DIM, width=1)
         c.create_text(W//2, H-13, fill=C_DIM, font=font_body(9),
-                      text="EXON · Windows Edition · Realtime Voice Core")
+                      text="FESA · Yapay Zekâ Çekirdeği · Windows")
         c.create_text(W-18, H-13, fill=C_DIM, font=font_body(9),
                       text="[F4] MUTE  [F5] PAUSE  [ESC] EXIT", anchor="e")
 
@@ -1807,65 +2781,107 @@ class ExonUI:
         self._close_setup_ui()
         self.setup_frame = tk.Frame(self.root, bg="#03060d",
                                     highlightbackground=C_PRI, highlightthickness=1)
-        setup_w = min(760, max(560, int(self.W*0.42)))
-        setup_h = min(520, max(430, int(self.H*0.44)))
+        setup_w = min(820, max(600, int(self.W*0.46)))
+        setup_h = min(640, max(540, int(self.H*0.58)))
         self.setup_frame.place(relx=0.5, rely=0.5, anchor="center", width=setup_w, height=setup_h)
         self.setup_frame.pack_propagate(False)
 
-        title    = "◈ API AYARLARI" if edit_mode else "◈ İLK KURULUM GEREKLİ"
-        subtitle = ("Gemini ve YouTube ayarlarınızı güncelleyin." if edit_mode
-                    else "Gemini API anahtarını girin. YouTube alanları opsiyoneldir.")
+        title    = "◈ API AYARLARI" if edit_mode else "◈ HOŞ GELDİN — TEK ADIM KALDI"
         config = load_app_config()
 
+        tk.Label(self.setup_frame, text="FESA", fg=C_CYAN, bg="#03060d",
+                 font=font_display(15)).pack(pady=(18, 0))
         tk.Label(self.setup_frame, text=title, fg=C_PRI, bg="#03060d",
-                 font=font_display(20)).pack(pady=(28, 6))
-        tk.Label(self.setup_frame, text=subtitle, fg=C_MID, bg="#03060d",
-                 font=font_body(13)).pack(pady=(0, 14))
-        tk.Label(self.setup_frame, text="GEMINI API KEY", fg=C_DIM, bg="#03060d",
-                 font=font_body(12)).pack(pady=(8, 4))
+                 font=font_display(19)).pack(pady=(6, 4))
 
-        self.api_entry = tk.Entry(self.setup_frame, width=60, fg=C_TEXT, bg="#06101f",
+        if not edit_mode:
+            # Adım adım rehber kutusu
+            steps = tk.Frame(self.setup_frame, bg="#081426",
+                             highlightbackground=C_MID, highlightthickness=1)
+            steps.pack(fill="x", padx=22, pady=(4, 10))
+            tk.Label(steps, text="FESA AI'nın konuşması için ücretsiz bir anahtar gerekir:",
+                     fg=C_CYAN, bg="#081426", font=font_body_bold(11)).pack(anchor="w", padx=12, pady=(8, 2))
+            for line in ("1) Aşağıdaki mavi butona bas → Google sayfası açılır (Gmail ile giriş yap).",
+                         "2) 'Create API key' / 'API anahtarı oluştur' butonuna bas.",
+                         "3) Çıkan anahtarı kopyala (Ctrl+C).",
+                         "4) Buraya gel, 'YAPIŞTIR' butonuna bas ve KAYDET'e tıkla."):
+                tk.Label(steps, text=line, fg=C_TEXT, bg="#081426",
+                         font=font_body(10), anchor="w", justify="left").pack(anchor="w", padx=16, pady=1)
+            tk.Button(steps, text="🔑  ÜCRETSİZ ANAHTAR SAYFASINI AÇ", cursor="hand2",
+                      command=lambda: webbrowser.open("https://aistudio.google.com/apikey"),
+                      fg=C_BG, bg=C_CYAN, activebackground=C_ORG2, activeforeground=C_BG,
+                      font=font_body_bold(12), borderwidth=0, padx=18, pady=8).pack(pady=(8, 10))
+
+        tk.Label(self.setup_frame, text="GEMINI API KEY (zorunlu)", fg=C_DIM, bg="#03060d",
+                 font=font_body(11)).pack(pady=(4, 2))
+        keyrow = tk.Frame(self.setup_frame, bg="#03060d")
+        keyrow.pack(pady=(0, 6))
+        self.api_entry = tk.Entry(keyrow, width=46, fg=C_TEXT, bg="#06101f",
                                   insertbackground=C_TEXT, borderwidth=0,
-                                  font=font_body(14), show="*")
-        self.api_entry.pack(pady=(0, 8), ipady=5)
+                                  font=font_body(13))
+        self.api_entry.pack(side="left", ipady=6)
+        self.api_entry.bind("<Return>", lambda e: self._save_api_key())
+
+        def _paste_key():
+            try:
+                clip = self.root.clipboard_get().strip()
+                if clip:
+                    self.api_entry.delete(0, tk.END)
+                    self.api_entry.insert(0, clip)
+            except Exception:
+                pass
+        tk.Button(keyrow, text="YAPIŞTIR", command=_paste_key, cursor="hand2",
+                  fg=C_PRI, bg=C_PANEL, activebackground=C_PRI, activeforeground=C_BG,
+                  font=font_body_bold(10), borderwidth=0, padx=12, pady=6).pack(side="left", padx=(8, 0))
         current_key = str(config.get("gemini_api_key", "") or "")
         if current_key:
             self.api_entry.insert(0, current_key)
 
-        tk.Label(self.setup_frame, text="YOUTUBE API KEY", fg=C_DIM, bg="#03060d",
-                 font=font_body(12)).pack(pady=(10, 4))
-        self.youtube_api_entry = tk.Entry(self.setup_frame, width=60, fg=C_TEXT, bg="#06101f",
+        # YouTube alanları — opsiyonel, küçük ve katlanır
+        tk.Label(self.setup_frame, text="(İsteğe bağlı) YouTube analizi için:",
+                 fg="#4a6a90", bg="#03060d", font=font_body(9)).pack(pady=(8, 0))
+        yt_row = tk.Frame(self.setup_frame, bg="#03060d")
+        yt_row.pack(pady=(2, 0))
+        self.youtube_api_entry = tk.Entry(yt_row, width=28, fg=C_TEXT, bg="#06101f",
                                           insertbackground=C_TEXT, borderwidth=0,
-                                          font=font_body(14), show="*")
-        self.youtube_api_entry.pack(pady=(0, 8), ipady=5)
-        current_yt = str(config.get("youtube_api_key", "") or "")
-        if current_yt:
-            self.youtube_api_entry.insert(0, current_yt)
-
-        tk.Label(self.setup_frame, text="YOUTUBE HANDLE / CHANNEL", fg=C_DIM, bg="#03060d",
-                 font=font_body(12)).pack(pady=(10, 4))
-        self.youtube_handle_entry = tk.Entry(self.setup_frame, width=60, fg=C_TEXT, bg="#06101f",
+                                          font=font_body(11), show="*")
+        self.youtube_api_entry.pack(side="left", ipady=4, padx=3)
+        self.youtube_api_entry.insert(0, str(config.get("youtube_api_key", "") or ""))
+        self.youtube_handle_entry = tk.Entry(yt_row, width=20, fg=C_TEXT, bg="#06101f",
                                              insertbackground=C_TEXT, borderwidth=0,
-                                             font=font_body(14))
-        self.youtube_handle_entry.pack(pady=(0, 8), ipady=5)
-        current_handle = str(config.get("youtube_channel_handle", "") or "")
-        if current_handle:
-            self.youtube_handle_entry.insert(0, current_handle)
+                                             font=font_body(11))
+        self.youtube_handle_entry.pack(side="left", ipady=4, padx=3)
+        self.youtube_handle_entry.insert(0, str(config.get("youtube_channel_handle", "") or ""))
+        tk.Label(self.setup_frame, text="YouTube API key            @kanal-adı",
+                 fg="#3a567a", bg="#03060d", font=font_body(8)).pack(pady=(1, 0))
+
+        self._setup_status = tk.Label(self.setup_frame, text="", fg=C_RED, bg="#03060d",
+                                      font=font_body(11))
+        self._setup_status.pack(pady=(8, 0))
 
         buttons = tk.Frame(self.setup_frame, bg="#03060d")
-        buttons.pack(pady=14)
-        tk.Button(buttons, text="▸ KAYDET", command=self._save_api_key,
-                  bg=C_BG, fg=C_PRI, activebackground="#0e3a66",
+        buttons.pack(pady=12)
+        tk.Button(buttons, text="✓  KAYDET VE BAŞLA", command=self._save_api_key, cursor="hand2",
+                  bg=C_GREEN, fg=C_BG, activebackground=C_CYAN, activeforeground=C_BG,
                   font=font_body_bold(13), borderwidth=0, padx=24, pady=10).pack(side="left", padx=8)
         if edit_mode:
-            tk.Button(buttons, text="KAPAT", command=self._close_setup_ui,
+            tk.Button(buttons, text="KAPAT", command=self._close_setup_ui, cursor="hand2",
                       bg="#0a1626", fg=C_DIM, activebackground="#143153",
                       font=font_body_bold(13), borderwidth=0, padx=24, pady=10).pack(side="left", padx=8)
+        self.api_entry.focus_set()
 
     def _save_api_key(self):
         was_ready = self._api_key_ready
         key = self.api_entry.get().strip() if self.api_entry else ""
         if not key:
+            if hasattr(self, "_setup_status"):
+                self._setup_status.configure(
+                    text="Lütfen önce anahtarı yapıştır. (Mavi butonla sayfayı aç → kopyala → YAPIŞTIR)")
+            return
+        if len(key) < 20:
+            if hasattr(self, "_setup_status"):
+                self._setup_status.configure(
+                    text="Bu anahtar çok kısa görünüyor; tam kopyaladığından emin ol.")
             return
         youtube_key    = self.youtube_api_entry.get().strip()   if self.youtube_api_entry else ""
         youtube_handle = self.youtube_handle_entry.get().strip() if self.youtube_handle_entry else ""
@@ -1882,4 +2898,4 @@ class ExonUI:
             self.write_log("SYS: API ayarlari guncellendi.")
         else:
             self.set_state("LISTENING")
-            self.write_log("SYS: EXON hazır. Dinliyorum...")
+            self.write_log("SYS: ✓ Anahtar kaydedildi. EXON hazır, dinliyorum...")

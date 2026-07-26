@@ -7,5 +7,18 @@
   "picovoice_access_key": "",
   "wake_keyword_path": "",
   "telegram_bot_token": "",
-  "discord_bot_token": ""
+  "discord_bot_token": "",
+  "gmail_address": "",
+  "gmail_app_password": "",
+  "barge_in": true,
+  "barge_in_threshold": 1100,
+  "pro_active": false,
+  "license_key": "",
+  "license_secret": "",
+  "pro_plan": "",
+  "gumroad_product_id": "",
+  "gumroad_product_permalink": "",
+  "pro_purchase_url": "",
+  "pro_purchase_url_monthly": "",
+  "pro_purchase_url_yearly": ""
 }

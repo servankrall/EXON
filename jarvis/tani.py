@@ -1,0 +1,108 @@
+"""
+EXON tani araci — 0xC0000005 (kod -1073741819) cokmesinin sebebini bulur.
+Kullanim:  python tani.py    (veya TANI.bat'a cift tikla)
+
+Her 'native' modulu AYRI bir surecte test eder; biri cokse bile digerleri devam
+eder. Sonunda hangisinin COKERTTIGINI net listeler. Cikti'yi paylasinca
+sorumlu modulu kesin biliriz.
+EXON Robotik tarafindan gelistirilmistir.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+# (etiket, import/init kodu) — native cokme riski olanlar onde
+TESTS = [
+    ("tkinter (arayuz)",        "import tkinter; tkinter.Tk().destroy()"),
+    ("PIL / Pillow",            "from PIL import Image, ImageTk"),
+    ("psutil",                  "import psutil; psutil.cpu_percent()"),
+    ("requests",                "import requests"),
+    ("bs4",                     "import bs4"),
+    ("google.genai",            "from google import genai"),
+    ("pygame (import)",         "import pygame"),
+    ("pygame.mixer.init SES",   "import pygame; pygame.mixer.init()"),
+    ("pyaudio (import)",        "import pyaudio"),
+    ("pyaudio.PyAudio() SES",   "import pyaudio; p=pyaudio.PyAudio(); p.terminate()"),
+    ("pywin32 win32gui",        "import win32gui"),
+    ("pywin32 win32com",        "import win32com.client"),
+    ("pyttsx3 (TTS)",           "import pyttsx3; pyttsx3.init()"),
+    ("pyautogui",               "import pyautogui"),
+    ("pygetwindow",             "import pygetwindow"),
+]
+
+print("=" * 60)
+print("  EXON tani - sistem bilgisi")
+print("=" * 60)
+import platform
+print("  Python surumu :", sys.version.split()[0])
+print("  Mimari (bit)  :", platform.architecture()[0], "/", platform.machine())
+print("  Python yolu   :", sys.executable)
+low = sys.executable.lower()
+here = str(Path(__file__).resolve().parent)
+problem = False
+if "onedrive" in low or "onedrive" in here.lower():
+    print("  >>> SORUN: Klasor OneDrive icinde! OneDrive dosyalari kilitleyip")
+    print("      C kutuphanelerini (pygame vb.) COKERTIR. OneDrive DISINA tasi.")
+    problem = True
+import re as _re
+if _re.search(r"[ ()]", here):
+    print("  >>> SORUN: Klasor yolunda BOSLUK veya PARANTEZ var:")
+    print("      " + here)
+    print("      Bu, native modulleri (0xC0000005) cokertir. Basit yola tasi.")
+    problem = True
+if "windowsapps" in low or "microsoft" in low:
+    print("  >>> UYARI: Microsoft Store Python'u! python.org surumune gec.")
+    problem = True
+if platform.architecture()[0] == "32bit":
+    print("  >>> UYARI: 32-bit Python. 64-bit kur.")
+    problem = True
+if problem:
+    print()
+    print("  ONERILEN COZUM:")
+    print("   1) Bu 'jarvis' klasorunu kopyala")
+    print("   2) Suraya yapistir:  C:\\EXON\\jarvis   (OneDrive DISI, bosluksuz)")
+    print("   3) Oradaki EXON_Baslat.bat'a cift tikla")
+print("=" * 60)
+print("  Modulleri tek tek test ediyor...")
+print("=" * 60)
+
+crashed, failed, ok = [], [], []
+for label, code in TESTS:
+    sys.stdout.write(f"  {label:.<34} ")
+    sys.stdout.flush()
+    r = subprocess.run([sys.executable, "-c", code],
+                       capture_output=True, text=True)
+    if r.returncode == 0:
+        print("OK")
+        ok.append(label)
+    elif r.returncode in (-1073741819, 3221225477, -1073741795, -1073740791):
+        print("COKTU (0xC0000005)  <-- SORUMLU OLABILIR")
+        crashed.append(label)
+    else:
+        print(f"hata (kod {r.returncode})")
+        err = (r.stderr or "").strip().splitlines()
+        if err:
+            print("        " + err[-1][:90])
+        failed.append(label)
+
+print("\n" + "=" * 60)
+print("  OZET")
+print("=" * 60)
+if crashed:
+    print("  COKEN (0xC0000005) modul(ler):")
+    for c in crashed:
+        print("    - " + c)
+    print("\n  >>> Bu satir(lar)i bana yapistir; o modulu guvenli hale getiririm.")
+elif failed:
+    print("  Cokme yok ama su modul(ler) yuklenemedi:")
+    for f in failed:
+        print("    - " + f)
+    print("\n  Bu listeyi paylas.")
+else:
+    print("  Tum moduller TEK TEK sorunsuz! Cokme birlikte yuklenince olusuyor.")
+    print("  Bu sonucu bana yaz; main.py'de izole baslatma ekleyecegim.")
+print("=" * 60)
+input("\n  ENTER ile kapat...")

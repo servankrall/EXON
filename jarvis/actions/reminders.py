@@ -14,8 +14,9 @@ import uuid
 from pathlib import Path
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-REMINDERS_FILE = BASE_DIR / "memory" / "reminders.json"
+from paths import DATA_DIR
+
+REMINDERS_FILE = DATA_DIR / "memory" / "reminders.json"
 
 TR_WEEKDAYS = ["Pazartesi", "Sali", "Carsamba", "Persembe", "Cuma", "Cumartesi", "Pazar"]
 TR_MONTHS = ["", "Ocak", "Subat", "Mart", "Nisan", "Mayis", "Haziran",

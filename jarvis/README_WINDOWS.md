@@ -134,6 +134,14 @@ Apple HealthKit Windows'ta mevcut değil. Manuel JSON ile kullanılabilir:
 
 ## Sorun Giderme
 
+**`No module named 'tkinter'` hatası:**
+tkinter **pip ile kurulmaz**; Python ile birlikte gelir. Python kurulumunda "tcl/tk and
+IDLE" bileşeni seçilmemiş demektir. Çözüm:
+- **Ayarlar > Uygulamalar > Yüklü uygulamalar > Python 3.x > ... > Değiştir (Modify)**
+- **"tcl/tk and IDLE"** kutusunu işaretle > **Modify**
+- Ya da [python.org](https://www.python.org/downloads/)'dan Python'u tekrar kurarken bu
+  kutuyu işaretle. (Microsoft Store sürümünde sorun çıkarsa python.org sürümünü kullan.)
+
 **PyAudio kurulmuyor:**
 ```cmd
 pip install pipwin

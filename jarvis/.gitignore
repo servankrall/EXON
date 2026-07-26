@@ -7,10 +7,29 @@ __pycache__/
 .swift-cache/
 .swift-home/
 
+# PyInstaller / paketleme artiklari + kurulum isaretleri
+build/
+dist/
+*.spec
+*.egg-info/
+.exon_installed
+.deps_installed
+EXON_data/
+
 config/api_keys.json
 memory/memory.json
 memory/phone_book.json
 generated_images/
+beats/
+screenshots/
+vectors/
+security/
+backups/
+plugins/
+analytics.json
+memory/tasks.json
 faces/
 memory/scheduled_tasks.json
 wake/*.ppn
+memory/todo.json
+memory/quick_notes.json

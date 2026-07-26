@@ -19,8 +19,9 @@ from pathlib import Path
 
 from app_config import get_app_config_value
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-WAKE_DIR = BASE_DIR / "wake"
+from paths import DATA_DIR
+
+WAKE_DIR = DATA_DIR / "wake"
 
 try:
     import pvporcupine  # type: ignore

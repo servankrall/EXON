@@ -11,6 +11,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+# EXON'un bu oturumda açtığı uygulamalar (close_app ile kapatmak için izlenir)
+OPENED_APPS: list[str] = []
+
 # Kısa isimden Windows yürütülebilir/URI eşlemesi
 APP_ALIASES = {
     # Tarayıcılar
@@ -207,4 +210,7 @@ def open_app(app_name: str) -> str:
     if resolved is None:
         resolved = app_name
 
-    return _launch(resolved, app_name)
+    result = _launch(resolved, app_name)
+    if "açıldı" in result and normalized not in OPENED_APPS:
+        OPENED_APPS.append(normalized)
+    return result

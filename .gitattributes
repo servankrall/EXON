@@ -1,0 +1,10 @@
+# Windows betikleri (.bat/.cmd/.ps1) DAIMA CRLF satir sonuyla cikarilsin.
+# Aksi halde LF satir sonlu .bat dosyalari cift tiklayinca "acilip kapanma"
+# gibi garip davranabilir. Bu dosya bunu kalici olarak cozer.
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Python ve metin dosyalari normal (LF) kalsin.
+*.py    text eol=lf
+*.md    text eol=lf

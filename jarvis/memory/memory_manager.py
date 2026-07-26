@@ -8,8 +8,9 @@ import re
 import unicodedata
 from pathlib import Path
 
-BASE_DIR    = Path(__file__).resolve().parent.parent
-MEMORY_FILE = BASE_DIR / "memory" / "memory.json"
+from paths import DATA_DIR
+
+MEMORY_FILE = DATA_DIR / "memory" / "memory.json"
 
 
 def load_memory() -> dict:

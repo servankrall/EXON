@@ -14,8 +14,9 @@ import uuid
 from pathlib import Path
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-CALENDAR_FILE = BASE_DIR / "memory" / "calendar.json"
+from paths import DATA_DIR
+
+CALENDAR_FILE = DATA_DIR / "memory" / "calendar.json"
 
 TR_WEEKDAYS = ["Pazartesi", "Sali", "Carsamba", "Persembe", "Cuma", "Cumartesi", "Pazar"]
 TR_MONTHS = ["", "Ocak", "Subat", "Mart", "Nisan", "Mayis", "Haziran",

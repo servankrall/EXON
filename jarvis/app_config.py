@@ -5,8 +5,9 @@ import json
 from pathlib import Path
 
 
-BASE_DIR = Path(__file__).resolve().parent
-CONFIG_DIR = BASE_DIR / "config"
+from paths import DATA_DIR
+
+CONFIG_DIR = DATA_DIR / "config"
 CONFIG_PATH = CONFIG_DIR / "api_keys.json"
 
 
@@ -23,6 +24,26 @@ DEFAULT_CONFIG = {
     "wake_keyword_path": "",      # özel .ppn yolu (boşsa wake/Hey-EXON_windows.ppn veya 'jarvis')
     "telegram_bot_token": "",     # Telegram köprüsü (@BotFather)
     "discord_bot_token": "",      # Discord köprüsü (discord.py gerekir)
+    # ── E-posta (Gmail IMAP/SMTP — uygulama şifresi, OAuth gerekmez) ──
+    "gmail_address": "",          # Gmail adresin (e-posta okuma/gönderme için)
+    "gmail_app_password": "",     # Google 'uygulama şifresi' (16 hane; normal şifre değil)
+    # ── Barge-in: EXON konuşurken konuşursan susup seni dinler ──
+    "barge_in": True,             # false yaparsan kapanır
+    "barge_in_threshold": 1100,   # ses eşiği; düşürürsen daha hassas, yükseltirsen daha zor tetiklenir
+    # ── EXON Pro (ücretli katman — Gumroad lisans doğrulama, backend gerekmez) ──
+    "pro_active": False,                 # true: tüm Pro özellikleri açık (kendi makinen için)
+    "license_key": "",                   # müşterinin girdiği lisans anahtarı
+    "license_secret": "",                 # çevrimdışı anahtar imzası (boşsa gömülü varsayılan)
+    "pro_plan": "",                       # 'monthly' | 'yearly' | 'lifetime'
+    "gumroad_product_id": "",            # Gumroad ürün ID'si (lisans doğrulama için)
+    "gumroad_product_permalink": "",     # alternatif: Gumroad permalink (örn. 'exon-pro')
+    "pro_purchase_url": "",              # genel satın alma linki (yedek)
+    "pro_purchase_url_monthly": "",      # Aylık ($2/ay) satın alma linki
+    "pro_purchase_url_yearly": "",       # Yıllık ($10/yıl) satın alma linki
+    # ── Yerel model (Ollama) — çevrimdışı/sansürsüz ──
+    "ollama_url": "",                    # boşsa http://localhost:11434
+    "ollama_model": "",                  # genel yerel model (örn. llama3.2)
+    "ollama_savage_model": "",           # savage için sansürsüz model (örn. dolphin-mistral)
 }
 
 
