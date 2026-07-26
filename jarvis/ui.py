@@ -53,10 +53,10 @@ else:
 
 BASE_DIR = Path(__file__).resolve().parent
 
-SYSTEM_NAME  = "EXON"
-COMPANY_NAME = "EXON ROBOTİK"
-TAGLINE      = "EXON ROBOTİK · GELİŞMİŞ YAPAY ZEKÂ ASİSTANI"
-MODEL_BADGE  = "EXON ROBOTİK · NEURAL CORE"
+SYSTEM_NAME  = "FESA AI"
+COMPANY_NAME = "FESA"
+TAGLINE      = "FESA · GELİŞMİŞ YAPAY ZEKÂ ASİSTANI"
+MODEL_BADGE  = "FESA · NEURAL CORE"
 
 # ── EXON renk paleti — Neon Mavi / Siyah / Hologram ──────────────────────────
 C_BG      = "#04070f"   # derin siyah-lacivert zemin
@@ -341,7 +341,7 @@ class SoundManager:
 class ExonUI:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("EXON · EXON Robotik")
+        self.root.title("FESA AI")
         self.root.update_idletasks()
 
         sw = self.root.winfo_screenwidth()
@@ -540,7 +540,7 @@ class ExonUI:
         self._resize_surface(sw, sh)
 
     def _show_boot_splash(self):
-        """Açılışta kısa bir 'EXON ROBOTİK' marka ekranı gösterir (~2.2 sn)."""
+        """Açılışta kısa bir 'FESA' marka ekranı gösterir (~2.2 sn)."""
         try:
             sp = tk.Toplevel(self.root)
             sp.overrideredirect(True)
@@ -559,11 +559,11 @@ class ExonUI:
                                    (12, h - 12, 1, -1), (w - 12, h - 12, -1, -1)]:
                 cv.create_line(bx, by, bx + sx * bl, by, fill=C_CYAN, width=2)
                 cv.create_line(bx, by, bx, by + sy * bl, fill=C_CYAN, width=2)
-            cv.create_text(w // 2 + 2, h // 2 - 30, text="  ".join("EXON"),
+            cv.create_text(w // 2 + 2, h // 2 - 30, text="  ".join("FESA"),
                            fill=self._ac(25, 224, 255, 90), font=font_display(44))
-            cv.create_text(w // 2, h // 2 - 32, text="  ".join("EXON"),
+            cv.create_text(w // 2, h // 2 - 32, text="  ".join("FESA"),
                            fill=C_PRI, font=font_display(44))
-            cv.create_text(w // 2, h // 2 + 16, text="R O B O T İ K",
+            cv.create_text(w // 2, h // 2 + 16, text="A  I",
                            fill=C_CYAN, font=font_display(22))
             cv.create_line(w // 2 - 150, h // 2 + 44, w // 2 + 150, h // 2 + 44, fill=C_MID)
             cv.create_text(w // 2, h // 2 + 66,
@@ -690,7 +690,7 @@ class ExonUI:
         except Exception:
             pro = False
         win = tk.Toplevel(self.root)
-        win.title("EXON PRO")
+        win.title("FESA AI PRO")
         win.configure(bg=C_BG)
         win.attributes("-topmost", True)
         win.lift()
@@ -701,7 +701,7 @@ class ExonUI:
         win.minsize(520, 560)
         win.resizable(True, True)
 
-        tk.Label(win, text="✦ EXON PRO", fg=C_GOLD, bg=C_BG,
+        tk.Label(win, text="✦ FESA AI PRO", fg=C_GOLD, bg=C_BG,
                  font=font_display(26)).pack(pady=(18, 2))
         if pro:
             lbl = current_plan_label()
@@ -823,7 +823,7 @@ class ExonUI:
         except Exception:
             pass
         self.write_log(f"Siz: [Görsel yüklendi: {os.path.basename(path)}]")
-        self.show_image_preview(path, title="EXON · Yüklenen Görsel")
+        self.show_image_preview(path, title="FESA AI · Yüklenen Görsel")
         if self.on_image_uploaded:
             threading.Thread(target=self.on_image_uploaded,
                              args=(path, ""), daemon=True).start()
@@ -835,7 +835,7 @@ class ExonUI:
             self._open_pro_dialog()
             return
         prompt = simpledialog.askstring(
-            "EXON · Görsel Oluştur",
+            "FESA AI · Görsel Oluştur",
             "Nasıl bir görsel oluşturayım? (İngilizce açıklama daha iyi sonuç verir)",
             parent=self.root,
         )
@@ -857,12 +857,12 @@ class ExonUI:
             res = {"ok": False, "path": None, "message": f"Görsel oluşturulamadı: {e}"}
         if res.get("ok") and res.get("path"):
             self.write_log(f"SYS: {res.get('message', 'Görsel oluşturuldu.')}")
-            self.show_image_preview(res["path"], title="EXON · Oluşturulan Görsel")
+            self.show_image_preview(res["path"], title="FESA AI · Oluşturulan Görsel")
             self.play_success_sfx()
         else:
             self.write_log(f"ERR: {res.get('message', 'Görsel oluşturulamadı.')}")
 
-    def show_image_preview(self, image_path: str, title: str = "EXON · Görsel"):
+    def show_image_preview(self, image_path: str, title: str = "FESA AI · Görsel"):
         """Üretilen veya yüklenen görseli ayrı bir pencerede gösterir."""
         def _open():
             try:
@@ -2663,7 +2663,7 @@ class ExonUI:
             span = (rx+ew+8)-(lx-ew-8)
             sxp = (lx-ew-8) + int((t*7) % max(1, span))
             c.create_line(sxp, ey-eh//2+2, sxp, ey+eh//2-2, fill=col, width=3)
-            c.create_text(FCX, ey, text="EXON", fill=self._ac(R, G, B, 120), font=font_body_bold(8))
+            c.create_text(FCX, ey, text="FESA", fill=self._ac(R, G, B, 120), font=font_body_bold(8))
             mouth_grille() if self.speaking else mouth_line()
         elif self.speaking:
             (eye_closed if blink else eye_happy)(lx)
@@ -2769,7 +2769,7 @@ class ExonUI:
         c.create_rectangle(0, H-FOOTER_H, W, H, fill="#03070f", outline="")
         c.create_line(0, H-FOOTER_H, W, H-FOOTER_H, fill=C_DIM, width=1)
         c.create_text(W//2, H-13, fill=C_DIM, font=font_body(9),
-                      text="EXON ROBOTİK · EXON Yapay Zekâ Çekirdeği · Windows")
+                      text="FESA · Yapay Zekâ Çekirdeği · Windows")
         c.create_text(W-18, H-13, fill=C_DIM, font=font_body(9),
                       text="[F4] MUTE  [F5] PAUSE  [ESC] EXIT", anchor="e")
 
@@ -2789,7 +2789,7 @@ class ExonUI:
         title    = "◈ API AYARLARI" if edit_mode else "◈ HOŞ GELDİN — TEK ADIM KALDI"
         config = load_app_config()
 
-        tk.Label(self.setup_frame, text="EXON ROBOTİK", fg=C_CYAN, bg="#03060d",
+        tk.Label(self.setup_frame, text="FESA", fg=C_CYAN, bg="#03060d",
                  font=font_display(15)).pack(pady=(18, 0))
         tk.Label(self.setup_frame, text=title, fg=C_PRI, bg="#03060d",
                  font=font_display(19)).pack(pady=(6, 4))
@@ -2799,7 +2799,7 @@ class ExonUI:
             steps = tk.Frame(self.setup_frame, bg="#081426",
                              highlightbackground=C_MID, highlightthickness=1)
             steps.pack(fill="x", padx=22, pady=(4, 10))
-            tk.Label(steps, text="EXON'un konuşması için ücretsiz bir anahtar gerekir:",
+            tk.Label(steps, text="FESA AI'nın konuşması için ücretsiz bir anahtar gerekir:",
                      fg=C_CYAN, bg="#081426", font=font_body_bold(11)).pack(anchor="w", padx=12, pady=(8, 2))
             for line in ("1) Aşağıdaki mavi butona bas → Google sayfası açılır (Gmail ile giriş yap).",
                          "2) 'Create API key' / 'API anahtarı oluştur' butonuna bas.",
